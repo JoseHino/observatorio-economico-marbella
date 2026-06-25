@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Observatorio Económico de Marbella</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f8fb; --bg2:#eef2f7; --card:#fff; --card2:#f8fafc; --elev:#f1f5f9;
+  --text:#0b1220; --muted:#5b6573; --faint:#a3acba;
+  --accent:#2563eb; --cyan:#0891b2; --neon:#059669; --gold:#c2410c;
+  --good:#059669; --bad:#dc2626; --warn:#d97706; --purple:#7c3aed;
+  --border:#e2e8f0; --border2:rgba(37,99,235,.22);
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --sans:'Space Grotesk','Inter',-apple-system,Segoe UI,Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:-.005em}
+body::before{content:'';position:fixed;inset:0;background:
+  radial-gradient(ellipse 900px 500px at 15% -20%,rgba(37,99,235,.08),transparent 60%),
+  radial-gradient(ellipse 700px 400px at 90% 110%,rgba(8,145,178,.05),transparent 60%),
+  linear-gradient(rgba(15,23,42,.025) 1px,transparent 1px) 0 0/100% 32px,
+  linear-gradient(90deg,rgba(15,23,42,.025) 1px,transparent 1px) 0 0/32px 100%;
+  pointer-events:none;z-index:0}
+body>*{position:relative;z-index:1}
+::selection{background:rgba(37,99,235,.22)}
+a{color:var(--accent);text-decoration:none}
+header{background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(246,248,251,.96));border-bottom:1px solid var(--border);backdrop-filter:blur(20px);position:sticky;top:0;z-index:1000}
+.header-inner{padding:13px 26px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;max-width:1640px;margin:0 auto}
+.brand{display:flex;align-items:center;gap:13px}
+.brand-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),#1e3a8a);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#fff;box-shadow:0 6px 18px rgba(37,99,235,.22);flex-shrink:0}
+.brand-text h1{margin:0;font-size:15.5px;font-weight:600;line-height:1.15;display:flex;align-items:center;gap:9px}
+.brand-text h1 .sep{color:var(--faint);font-weight:300}
+.brand-text h1 .alt{color:var(--muted);font-weight:500}
+.brand-text .sub{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:1px}
+.head-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.status{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px}
+.status .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px rgba(217,119,6,.15);animation:pulse 1.6s infinite}
+.status.ready .dot{background:var(--good);box-shadow:0 0 0 3px rgba(5,150,105,.15);animation:none}
+.status.err .dot{background:var(--bad);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.btn{font-family:var(--sans);font-size:12.5px;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--accent),#1d4ed8);border:none;border-radius:9px;padding:9px 16px;cursor:pointer;box-shadow:0 4px 12px rgba(37,99,235,.22);transition:.15s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(37,99,235,.3)}
+.btn:active{transform:translateY(0)}
+nav.sections{position:sticky;top:67px;z-index:900;background:rgba(246,248,251,.9);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);overflow-x:auto}
+.nav-inner{max-width:1640px;margin:0 auto;display:flex;gap:4px;padding:8px 26px}
+nav.sections a{font-size:12.5px;font-weight:500;color:var(--muted);padding:7px 14px;border-radius:8px;white-space:nowrap;transition:.15s;cursor:pointer}
+nav.sections a:hover{background:var(--elev);color:var(--text)}
+nav.sections a.active{background:var(--accent);color:#fff}
+main{max-width:1640px;margin:0 auto;padding:26px}
+.hero{margin:6px 0 22px}
+.hero h2{font-size:27px;font-weight:700;margin:0 0 8px;letter-spacing:-.5px}
+.hero p{font-size:14px;color:var(--muted);max-width:980px;line-height:1.6;margin:0}
+.section{margin:24px 0 10px;display:none;animation:fade .25s ease}
+.section.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.section-head{display:flex;align-items:baseline;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.section-head h3{font-size:19px;font-weight:600;margin:0;letter-spacing:-.3px}
+.section-head .tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--accent);background:rgba(37,99,235,.08);border:1px solid var(--border2);padding:3px 9px;border-radius:6px}
+.section-head .desc{font-size:12.5px;color:var(--muted);flex:1;min-width:200px}
+.grid{display:grid;gap:16px}
+.g-kpi{grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.card.span2{grid-column:span 2}
+@media(max-width:900px){.card.span2{grid-column:span 1}}
+.card h4{margin:0 0 3px;font-size:14px;font-weight:600}
+.card .csub{font-size:11.5px;color:var(--muted);margin-bottom:14px;line-height:1.45}
+.chart-wrap{position:relative;height:320px}
+.chart-wrap.tall{height:400px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:17px 18px;position:relative;overflow:hidden}
+.kpi::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.kpi.k-good::after{background:var(--good)} .kpi.k-bad::after{background:var(--bad)} .kpi.k-warn::after{background:var(--warn)} .kpi.k-cyan::after{background:var(--cyan)} .kpi.k-purple::after{background:var(--purple)}
+.kpi .klabel{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:9px}
+.kpi .kval{font-size:27px;font-weight:700;letter-spacing:-.5px;line-height:1}
+.kpi .kunit{font-size:14px;font-weight:500;color:var(--muted);margin-left:3px}
+.kpi .kfoot{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.delta{font-family:var(--mono);font-weight:600;font-size:11.5px;padding:2px 7px;border-radius:6px}
+.delta.up{color:var(--good);background:rgba(5,150,105,.1)}
+.delta.down{color:var(--bad);background:rgba(220,38,38,.1)}
+.delta.flat{color:var(--muted);background:var(--elev)}
+.livebadge{font-family:var(--mono);font-size:10px;font-weight:600;color:#fff;background:var(--good);padding:2px 9px;border-radius:20px;vertical-align:middle;margin-left:6px}
+footer{max-width:1640px;margin:40px auto 30px;padding:24px 26px;border-top:1px solid var(--border);color:var(--muted);font-size:12px;line-height:1.7}
+footer h5{color:var(--text);font-size:13px;margin:0 0 8px}
+.badge{display:inline-block;font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:6px;background:var(--elev);border:1px solid var(--border);color:var(--muted);margin:2px 4px 2px 0}
+.src{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:9px}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-icon">M</div>
+      <div class="brand-text">
+        <h1>Observatorio Económico <span class="sep">·</span> <span class="alt">Marbella</span></h1>
+        <div class="sub">Indicadores socioeconómicos &nbsp;·&nbsp; INE · IECA · SEPE</div>
+      </div>
+    </div>
+    <div class="head-actions">
+      <div id="status" class="status"><span class="dot"></span><span id="status-txt">Inicializando…</span></div>
+      <button class="btn" id="refresh">↻ Recargar datos</button>
+    </div>
+  </div>
+</header>
+<nav class="sections">
+  <div class="nav-inner">
+    <a data-s="resumen">Resumen</a>
+    <a data-s="laboral">Mercado laboral</a>
+    <a data-s="contratacion">Contratación</a>
+    <a data-s="turismo">Turismo</a>
+    <a data-s="empresas">Tejido empresarial</a>
+    <a data-s="renta">Renta</a>
+  </div>
+</nav>
+<main>
+  <div class="hero">
+    <h2>Cuadro de mando socioeconómico de Marbella</h2>
+    <p>Panel de indicadores oficiales del municipio de Marbella (29069). <b>Todos los datos son dinámicos:</b> un proceso automático descarga cada día las fuentes oficiales (INE, IECA/Junta de Andalucía y SEPE) y las deja servidas junto a este panel, de modo que al abrirlo —hoy o dentro de un año— siempre muestra el último dato publicado, sin intervención manual. <span id="hero-upd"></span></p>
+  </div>
+
+  <!-- RESUMEN -->
+  <section class="section" id="resumen">
+    <div class="section-head"><h3>Resumen ejecutivo</h3><span class="tag">KPIs en vivo</span><span class="desc">Últimos valores oficiales disponibles de cada indicador, con variación respecto al periodo anterior.</span></div>
+    <div class="grid g-kpi" id="kpis"></div>
+  </section>
+
+  <!-- LABORAL -->
+  <section class="section" id="laboral">
+    <div class="section-head"><h3>Mercado laboral · Paro registrado</h3><span class="tag">SEPE + IECA</span><span class="desc">Paro registrado municipal: serie mensual del SEPE y media anual oficial del IECA, con desglose por sexo y sector.</span></div>
+    <div class="grid g2">
+      <div class="card span2">
+        <h4>Paro registrado mensual en Marbella <span id="paro-badge" class="livebadge">·</span></h4>
+        <div class="csub">Personas desempleadas inscritas en las oficinas del SEPE (cierre de cada mes), con desglose por sexo. Fuente dinámica: SEPE datos abiertos.</div>
+        <div class="chart-wrap tall"><canvas id="c_paro"></canvas></div>
+        <div class="src" id="paro-src"></div>
+      </div>
+      <div class="card">
+        <h4>Composición del paro por sexo y sector</h4>
+        <div class="csub">Distribución del paro registrado del último mes disponible por sector de actividad económica.</div>
+        <div class="chart-wrap"><canvas id="c_paro_sec"></canvas></div>
+      </div>
+      <div class="card">
+        <h4>Paro registrado · media anual oficial <span class="livebadge" id="paro-anual-badge">IECA</span></h4>
+        <div class="csub">Media anual del paro registrado en Marbella publicada por el IECA (Junta de Andalucía). Se actualiza sola al publicarse cada nuevo año.</div>
+        <div class="grid g-kpi" id="paro-anual-kpis" style="margin-top:4px"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTRATACION -->
+  <section class="section" id="contratacion">
+    <div class="section-head"><h3>Contratación</h3><span class="tag">SEPE</span><span class="desc">Contratos registrados mensualmente en el municipio.</span></div>
+    <div class="grid g2">
+      <div class="card span2">
+        <h4>Contratos registrados mensuales <span id="contr-badge" class="livebadge">·</span></h4>
+        <div class="csub">Total de contratos iniciales registrados cada mes en Marbella. Fuente dinámica: SEPE datos abiertos.</div>
+        <div class="chart-wrap tall"><canvas id="c_contr"></canvas></div>
+        <div class="src" id="contr-src"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TURISMO -->
+  <section class="section" id="turismo">
+    <div class="section-head"><h3>Turismo · motor económico</h3><span class="tag">INE · EOH</span><span class="desc">Demanda hotelera y rentabilidad (ADR / RevPAR) de Marbella, en vivo desde la API del INE.</span></div>
+    <div class="grid g2">
+      <div class="card span2">
+        <h4>Viajeros y pernoctaciones <span id="tur-badge" class="livebadge">·</span></h4>
+        <div class="csub">Viajeros alojados y pernoctaciones en establecimientos hoteleros de Marbella (serie mensual). Fuente: INE · Encuesta de Ocupación Hotelera.</div>
+        <div class="chart-wrap tall"><canvas id="c_tur"></canvas></div>
+        <div class="src" id="tur-src"></div>
+      </div>
+      <div class="card span2">
+        <h4>Rentabilidad hotelera · ADR y RevPAR</h4>
+        <div class="csub">ADR (tarifa media diaria por habitación ocupada) y RevPAR (ingreso por habitación disponible), en euros. Marbella lidera la rentabilidad hotelera nacional.</div>
+        <div class="chart-wrap"><canvas id="c_adr"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EMPRESAS -->
+  <section class="section" id="empresas">
+    <div class="section-head"><h3>Tejido empresarial</h3><span class="tag">INE · DIRCE</span><span class="desc">Número de empresas con actividad en Marbella, en vivo desde el DIRCE del INE.</span></div>
+    <div class="grid g2">
+      <div class="card span2">
+        <h4>Empresas activas en Marbella <span id="emp-badge" class="livebadge">·</span></h4>
+        <div class="csub">Empresas registradas en el Directorio Central de Empresas (DIRCE) del INE. Serie anual.</div>
+        <div class="chart-wrap tall"><canvas id="c_emp"></canvas></div>
+        <div class="src" id="emp-src"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RENTA -->
+  <section class="section" id="renta">
+    <div class="section-head"><h3>Renta y bienestar</h3><span class="tag">INE · Atlas de renta</span><span class="desc">Renta media por persona y por hogar en Marbella (Atlas de distribución de renta del INE).</span></div>
+    <div class="grid g2">
+      <div class="card span2">
+        <h4>Renta media anual <span id="renta-badge" class="livebadge">·</span></h4>
+        <div class="csub">Renta neta y bruta media por persona y por hogar, en euros. Fuente: INE · Atlas de distribución de renta de los hogares.</div>
+        <div class="chart-wrap tall"><canvas id="c_renta"></canvas></div>
+        <div class="src" id="renta-src"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <h5>Fuentes y método</h5>
+  <p>Datos oficiales actualizados automáticamente. <span class="badge">INE Tempus3</span><span class="badge">IECA / BADEA</span><span class="badge">SEPE datos abiertos</span></p>
+  <p style="margin-top:6px">El proceso de actualización (<span class="src" style="display:inline">fetch_data.py</span>) se ejecuta de forma programada en GitHub Actions y vuelca los datos a <span class="src" style="display:inline">/data/*.json</span>. Este panel los lee desde el mismo origen, por lo que no depende de que ninguna fuente tenga CORS ni de ningún PC encendido.</p>
+</footer>
+
+<script>
+const fmt0=new Intl.NumberFormat('es-ES',{maximumFractionDigits:0});
+const fmt1=new Intl.NumberFormat('es-ES',{maximumFractionDigits:1});
+const fmt2=new Intl.NumberFormat('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});
+const C={accent:'#2563eb',cyan:'#0891b2',neon:'#059669',gold:'#c2410c',bad:'#dc2626',warn:'#d97706',purple:'#7c3aed',muted:'#5b6573'};
+const GRID={color:'rgba(15,23,42,.06)'};
+const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const lblMes=t=>{const[a,m]=t.split('-');return MESES[+m-1]+' '+a.slice(2);};
+const charts={}, rendered={}, DATA={};
+
+function setStatus(t,s){const e=document.getElementById('status'),x=document.getElementById('status-txt');if(x)x.textContent=t;if(e)e.className='status'+(s?' '+s:'');}
+function deltaHtml(d,inv){if(d==null||!isFinite(d))return'';const up=d>0,cls=Math.abs(d)<0.05?'flat':((up&&!inv)||(!up&&inv)?'up':'down');const ar=d>0?'▲':(d<0?'▼':'■');return`<span class="delta ${cls}">${ar} ${fmt1.format(Math.abs(d))}%</span>`;}
+function pct(cur,prev){return(prev==null||!prev)?null:(cur-prev)/prev*100;}
+
+async function loadData(){
+  setStatus('Cargando datos…','');
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','turismo','empresas','renta'];
+  const bust='?v='+Date.now();
+  await Promise.all(files.map(async f=>{
+    try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
+    catch(e){DATA[f]=null;console.warn('no data',f,e);}
+  }));
+  const upd=DATA.meta&&DATA.meta.generado?new Date(DATA.meta.generado):null;
+  document.getElementById('hero-upd').innerHTML=upd?('<b>Última actualización automática: '+upd.toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+'.</b>'):'';
+  setStatus(upd?('Datos al día · '+upd.toLocaleDateString('es-ES')):'Datos cargados','ready');
+}
+
+/* ---- KPIs resumen ---- */
+function renderResumen(){
+  const k=[];
+  const pm=DATA.paro_mensual&&DATA.paro_mensual.serie||[];
+  if(pm.length){const c=pm.at(-1),p=pm.length>12?pm.at(-13):pm.at(-2);
+    k.push({l:'Paro registrado',v:fmt0.format(c.total),f:'mes '+lblMes(c.t)+' · SEPE',d:pct(c.total,p&&p.total),inv:true,cls:''});}
+  const co=DATA.contratos_mensual&&DATA.contratos_mensual.serie||[];
+  if(co.length){const c=co.at(-1),p=co.length>12?co.at(-13):co.at(-2);
+    k.push({l:'Contratos registrados',v:fmt0.format(c.total),f:'mes '+lblMes(c.t)+' · SEPE',d:pct(c.total,p&&p.total),inv:false,cls:'k-good'});}
+  const tu=DATA.turismo||{};
+  if(tu.viajeros&&tu.viajeros.length){const c=tu.viajeros.at(-1),p=tu.viajeros.length>12?tu.viajeros.at(-13):null;
+    k.push({l:'Viajeros (hoteles)',v:fmt0.format(c.v),f:'mes '+lblMes(c.t)+' · INE',d:pct(c.v,p&&p.v),inv:false,cls:'k-cyan'});}
+  if(tu.adr&&tu.adr.length){const c=tu.adr.at(-1);
+    k.push({l:'Precio medio hotel (ADR)',v:fmt0.format(c.v),u:'€',f:'mes '+lblMes(c.t)+' · INE',d:null,cls:'k-warn'});}
+  const em=DATA.empresas&&DATA.empresas.total||[];
+  if(em.length){const c=em.at(-1),p=em.at(-2);
+    k.push({l:'Empresas (DIRCE)',v:fmt0.format(c.v),f:'año '+c.y+' · INE',d:pct(c.v,p&&p.v),inv:false,cls:'k-purple'});}
+  const re=DATA.renta&&DATA.renta.neta_persona||[];
+  if(re.length){const c=re.at(-1);
+    k.push({l:'Renta neta/persona',v:fmt0.format(c.v),u:'€',f:'año '+c.y+' · INE',d:null,cls:''});}
+  document.getElementById('kpis').innerHTML=k.map(x=>`
+    <div class="kpi ${x.cls||''}">
+      <div class="klabel">${x.l}</div>
+      <div class="kval">${x.v}${x.u?`<span class="kunit">${x.u}</span>`:''}</div>
+      <div class="kfoot">${x.d!=null?deltaHtml(x.d,x.inv):''}<span>${x.f}</span></div>
+    </div>`).join('')||'<div class="card">Sin datos disponibles.</div>';
+}
+
+function thin(labels){const n=labels.length,step=Math.ceil(n/14);return labels.map((l,i)=>i%step===0||i===n-1?l:'');}
+
+/* ---- Laboral ---- */
+function renderLaboral(){
+  const s=DATA.paro_mensual&&DATA.paro_mensual.serie||[];
+  document.getElementById('paro-badge').textContent=s.length?('EN VIVO · '+lblMes(s.at(-1).t)):'sin datos';
+  document.getElementById('paro-src').textContent=s.length?('Fuente: SEPE · '+s.length+' meses · último '+s.at(-1).t):'';
+  if(s.length){
+    const L=s.map(x=>x.t);
+    charts.paro=new Chart(document.getElementById('c_paro'),{type:'line',
+      data:{labels:thin(L.map(lblMes)),datasets:[
+        {label:'Total',data:s.map(x=>x.total),borderColor:C.accent,backgroundColor:'rgba(37,99,235,.10)',fill:true,tension:.25,pointRadius:0,borderWidth:2.5},
+        {label:'Hombres',data:s.map(x=>x.hombres),borderColor:C.cyan,fill:false,tension:.25,pointRadius:0,borderWidth:1.5},
+        {label:'Mujeres',data:s.map(x=>x.mujeres),borderColor:C.gold,fill:false,tension:.25,pointRadius:0,borderWidth:1.5}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt0.format(c.parsed.y)}}},
+        scales:{x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:0}},y:{grid:GRID,ticks:{callback:v=>fmt0.format(v)}}}}});
+    const last=s.at(-1).sectores||{};
+    const segs=[['Servicios',last.servicios,C.accent],['Construcción',last.construccion,C.gold],['Industria',last.industria,C.purple],['Agricultura',last.agricultura,C.neon],['Sin empleo anterior',last.sin_empleo,C.muted]].filter(x=>x[1]!=null);
+    charts.parosec=new Chart(document.getElementById('c_paro_sec'),{type:'doughnut',
+      data:{labels:segs.map(x=>x[0]),datasets:[{data:segs.map(x=>x[1]),backgroundColor:segs.map(x=>x[2]),borderWidth:2,borderColor:'#fff'}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10.5}}},tooltip:{callbacks:{label:c=>c.label+': '+fmt0.format(c.parsed)}}}}});
+  }
+  const pa=DATA.paro_anual||{};
+  const kk=[['Total',pa.total,''],['Mujeres',pa.mujeres,'k-warn'],['Hombres',pa.hombres,'k-cyan']];
+  document.getElementById('paro-anual-kpis').innerHTML=kk.filter(x=>x[1]).map(([l,o,cls])=>`
+    <div class="kpi ${cls}"><div class="klabel">${l}</div><div class="kval">${fmt0.format(o.v)}</div>
+    <div class="kfoot"><span>media anual ${o.y}</span></div></div>`).join('')||'<div class="csub">Sin dato anual.</div>';
+}
+
+/* ---- Contratación ---- */
+function renderContr(){
+  const s=DATA.contratos_mensual&&DATA.contratos_mensual.serie||[];
+  document.getElementById('contr-badge').textContent=s.length?('EN VIVO · '+lblMes(s.at(-1).t)):'sin datos';
+  document.getElementById('contr-src').textContent=s.length?('Fuente: SEPE · último '+s.at(-1).t):'';
+  if(!s.length)return;
+  charts.contr=new Chart(document.getElementById('c_contr'),{type:'bar',
+    data:{labels:thin(s.map(x=>lblMes(x.t))),datasets:[{label:'Contratos',data:s.map(x=>x.total),backgroundColor:'rgba(8,145,178,.55)',borderColor:C.cyan,borderWidth:1,borderRadius:3}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt0.format(c.parsed.y)+' contratos'}}},
+      scales:{x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:0}},y:{grid:GRID,ticks:{callback:v=>fmt0.format(v)}}}}});
+}
+
+/* ---- Turismo ---- */
+function renderTurismo(){
+  const t=DATA.turismo||{};
+  const via=t.viajeros||[],per=t.pernoctaciones||[];
+  document.getElementById('tur-badge').textContent=via.length?('EN VIVO · '+lblMes(via.at(-1).t)):'sin datos';
+  document.getElementById('tur-src').textContent=via.length?('Fuente: INE · EOH · último '+via.at(-1).t):'';
+  if(via.length){
+    charts.tur=new Chart(document.getElementById('c_tur'),{type:'line',
+      data:{labels:thin(via.map(x=>lblMes(x.t))),datasets:[
+        {label:'Viajeros',data:via.map(x=>x.v),borderColor:C.accent,backgroundColor:'rgba(37,99,235,.08)',fill:true,tension:.25,pointRadius:0,borderWidth:2,yAxisID:'y'},
+        {label:'Pernoctaciones',data:per.map(x=>x.v),borderColor:C.cyan,fill:false,tension:.25,pointRadius:0,borderWidth:2,yAxisID:'y1'}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt0.format(c.parsed.y)}}},
+        scales:{x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:0}},y:{grid:GRID,position:'left',ticks:{callback:v=>fmt0.format(v)}},y1:{position:'right',grid:{display:false},ticks:{callback:v=>fmt0.format(v)}}}}});
+  }
+  const adr=t.adr||[],rev=t.revpar||[];
+  if(adr.length){
+    charts.adr=new Chart(document.getElementById('c_adr'),{type:'line',
+      data:{labels:thin(adr.map(x=>lblMes(x.t))),datasets:[
+        {label:'ADR (€)',data:adr.map(x=>x.v),borderColor:C.gold,backgroundColor:'rgba(194,65,12,.10)',fill:true,tension:.25,pointRadius:0,borderWidth:2},
+        {label:'RevPAR (€)',data:rev.map(x=>x.v),borderColor:C.purple,fill:false,tension:.25,pointRadius:0,borderWidth:2}
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+        plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt2.format(c.parsed.y)+' €'}}},
+        scales:{x:{grid:{display:false},ticks:{autoSkip:false,maxRotation:0}},y:{grid:GRID,ticks:{callback:v=>v+' €'}}}}});
+  }
+}
+
+/* ---- Empresas ---- */
+function renderEmpresas(){
+  const e=DATA.empresas&&DATA.empresas.total||[];
+  document.getElementById('emp-badge').textContent=e.length?('año '+e.at(-1).y):'sin datos';
+  document.getElementById('emp-src').textContent=e.length?('Fuente: INE · DIRCE (tabla 4721) · último '+e.at(-1).y):'';
+  if(!e.length)return;
+  charts.emp=new Chart(document.getElementById('c_emp'),{type:'line',
+    data:{labels:e.map(x=>x.y),datasets:[{label:'Empresas',data:e.map(x=>x.v),borderColor:C.purple,backgroundColor:'rgba(124,58,237,.10)',fill:true,tension:.3,pointRadius:3,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt0.format(c.parsed.y)+' empresas'}}},
+      scales:{x:{grid:{display:false}},y:{grid:GRID,ticks:{callback:v=>fmt0.format(v)}}}}});
+}
+
+/* ---- Renta ---- */
+function renderRenta(){
+  const r=DATA.renta||{};
+  const np=r.neta_persona||[],nh=r.neta_hogar||[],bp=r.bruta_persona||[];
+  document.getElementById('renta-badge').textContent=np.length?('año '+np.at(-1).y):'sin datos';
+  document.getElementById('renta-src').textContent=np.length?('Fuente: INE · Atlas de renta · último '+np.at(-1).y):'';
+  if(!np.length)return;
+  const yrs=np.map(x=>x.y);
+  charts.renta=new Chart(document.getElementById('c_renta'),{type:'line',
+    data:{labels:yrs,datasets:[
+      {label:'Renta neta media/persona',data:np.map(x=>x.v),borderColor:C.accent,backgroundColor:'rgba(37,99,235,.08)',fill:true,tension:.3,pointRadius:3,borderWidth:2,yAxisID:'y'},
+      {label:'Renta bruta media/persona',data:bp.map(x=>x.v),borderColor:C.gold,fill:false,tension:.3,pointRadius:3,borderWidth:2,yAxisID:'y'},
+      {label:'Renta neta media/hogar',data:nh.map(x=>x.v),borderColor:C.cyan,fill:false,tension:.3,pointRadius:3,borderWidth:2,yAxisID:'y1'}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt0.format(c.parsed.y)+' €'}}},
+      scales:{x:{grid:{display:false}},y:{grid:GRID,position:'left',ticks:{callback:v=>fmt0.format(v)+' €'}},y1:{position:'right',grid:{display:false},ticks:{callback:v=>fmt0.format(v)+' €'}}}}});
+}
+
+const SECTIONS={resumen:renderResumen,laboral:renderLaboral,contratacion:renderContr,turismo:renderTurismo,empresas:renderEmpresas,renta:renderRenta};
+
+function showSection(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.toggle('active',s.id===id));
+  document.querySelectorAll('nav.sections a').forEach(a=>a.classList.toggle('active',a.dataset.s===id));
+  if(SECTIONS[id]&&!rendered[id]){try{SECTIONS[id]();rendered[id]=true;}catch(e){console.error(e);}}
+}
+
+document.querySelectorAll('nav.sections a').forEach(a=>a.addEventListener('click',()=>showSection(a.dataset.s)));
+document.getElementById('refresh').addEventListener('click',async()=>{
+  Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});
+  for(const k in charts)delete charts[k];
+  for(const k in rendered)delete rendered[k];
+  await loadData();
+  const act=document.querySelector('.section.active');
+  showSection(act?act.id:'resumen');
+});
+
+(async function boot(){
+  await loadData();
+  showSection('resumen');
+})();
+</script>
+</body>
+</html>
