@@ -216,6 +216,19 @@ def empresas():
     sectores.sort(key=lambda x: x["v"], reverse=True)
     write("empresas.json", {"total": total, "sectores": sectores})
 
+# ---------------------------------------------------------------- VIVIENDA (INE ETDP + IPV)
+def vivienda():
+    step("Vivienda · INE (compraventa ETDP Málaga + precio IPV Andalucía)")
+    comp = {"general": "ETDP1696", "nueva": "ETDP1695", "segunda_mano": "ETDP1694"}
+    ipv  = {"indice": "IPV766", "var_anual": "IPV939",
+            "indice_nueva": "IPV765", "indice_segunda": "IPV764"}
+    data = {
+        "compraventa": {k: ine_mensual(c) for k, c in comp.items()},
+        "precio":      {k: ine_mensual(c) for k, c in ipv.items()},
+        "ambito": {"compraventa": "provincia de Málaga", "precio": "Andalucía"},
+    }
+    write("vivienda.json", data)
+
 # ---------------------------------------------------------------- PARO ANUAL (BADEA)
 def paro_badea():
     step("Paro registrado · IECA/BADEA (media anual municipal)")
@@ -359,7 +372,7 @@ def sepe_laboral():
 def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
-    for fn in (turismo, renta, demografia, empresas, paro_badea, sepe_laboral):
+    for fn in (turismo, renta, demografia, empresas, vivienda, paro_badea, sepe_laboral):
         try:
             fn()
         except Exception as e:
