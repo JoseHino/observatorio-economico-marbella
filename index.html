@@ -40,6 +40,8 @@ section{display:none} section.active{display:block;animation:f .35s}
 .src a:hover{text-decoration:underline}
 .tag{font-size:10px;padding:1px 7px;border-radius:10px;border:1px solid var(--line);margin-right:5px}
 .tag.live{color:#37e0a0;border-color:#1d6b4e} .tag.stat{color:#ffce56;border-color:#6b5b1d}
+.tag.geo{color:#9fc7ff;border-color:#2e4a7a;background:rgba(54,162,235,.08)}
+select.btn{appearance:auto}
 .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
 .btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:9px;cursor:pointer;font-size:13px}
 .btn:hover{border-color:var(--accent)} #status{color:var(--mut);font-size:12.5px}
@@ -63,7 +65,6 @@ Indicadores socioeconómicos oficiales del municipio de Marbella (29069) para la
   <span id="status">Inicializando…</span>
 </div>
 
-<section id="resumen"></section>
 <section id="laboral"></section>
 <section id="contratacion"></section>
 <section id="comparativa"></section>
@@ -115,9 +116,10 @@ const axY=(cb)=>({grid:GRID,ticks:{maxTicksLimit:6,callback:cb||(v=>abbr(v))}});
 const baseOpts=(extra={})=>Object.assign({responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false}},extra);
 
 /* ---------- estructura ---------- */
-const SECTIONS=[['resumen','Resumen'],['laboral','Mercado laboral'],['contratacion','Contratación'],
+const SECTIONS=[['laboral','Mercado laboral'],['contratacion','Contratación'],
  ['comparativa','Comparativa territorial'],['turismo','Turismo'],['empresas','Tejido empresarial'],
  ['renta','Renta y bienestar'],['demografia','Demografía'],['vivienda','Vivienda']];
+const geoTag=t=>'<span class="tag geo">'+t+'</span>';
 
 function card(id,title,sub,tag,src,full){
   return '<div class="card'+(full?' full':'')+'"><h3>'+title+'</h3>'+
@@ -143,40 +145,24 @@ async function loadData(){
 }
 function setStatus(t){const e=document.getElementById('status');if(e)e.textContent=t;}
 
-/* ================= RESUMEN ================= */
-function buildResumen(){
-  const el=document.getElementById('resumen');const k=[];
-  const pob=last((DATA.demografia||{}).poblacion);
-  if(pob){const[d,c]=deltaTxt(pct(pob.v,(prevY(DATA.demografia.poblacion)||{}).v));k.push(kpi(fmt(pob.v)+'',' Población · padrón '+pob.y,d,c));}
-  const pm=(DATA.paro_mensual||{}).serie||[];
-  if(pm.length){const cur=last(pm),[d,c]=deltaTxt(pct(cur.total,(prevY(pm)||{}).total),true);k.push(kpi(fmt(cur.total),'Paro registrado · '+lblMes(cur.t),d,c));}
-  const co=(DATA.contratos_mensual||{}).serie||[];
-  if(co.length){const cur=last(co),[d,c]=deltaTxt(pct(cur.total,(prevY(co)||{}).total));k.push(kpi(fmt(cur.total),'Contratos · '+lblMes(cur.t),d,c));
-    const tt=cur.total?cur.temporales/cur.total*100:null;k.push(kpi(fmt(tt,1)+' %','Tasa de temporalidad · '+lblMes(cur.t),'menor = más estable',''));}
-  const tu=(DATA.turismo&&DATA.turismo.hoteles)||{};
-  if((tu.viajeros||[]).length){const cur=last(tu.viajeros),[d,c]=deltaTxt(pct(cur.v,(prevY(tu.viajeros)||{}).v));k.push(kpi(abbr(cur.v),'Viajeros hoteles · '+lblMes(cur.t),d,c));}
-  if((tu.adr||[]).length){const cur=last(tu.adr);k.push(kpi(fmt(cur.v)+' €','Precio medio hotel (ADR) · '+lblMes(cur.t),'RevPAR '+fmt((last(tu.revpar)||{}).v)+' €',''));}
-  const em=(DATA.empresas||{}).total||[];
-  if(em.length){const cur=last(em),[d,c]=deltaTxt(pct(cur.v,(prevY(em)||{}).v));k.push(kpi(fmt(cur.v),'Empresas activas · '+cur.y,d,c));}
-  const re=(DATA.renta||{}).neta_persona||[];
-  if(re.length){k.push(kpi(fmt(last(re).v)+' €','Renta neta/persona · '+last(re).y,'',''));}
-  const rp=(DATA.renta||{}).riesgo_pobreza||[];
-  if(rp.length){k.push(kpi(fmt(last(rp).v,1)+' %','Riesgo de pobreza · '+last(rp).y,'',''));}
-  el.innerHTML='<div class="h2">Síntesis socioeconómica</div>'+
-    '<div class="pdesc">Últimos valores oficiales de cada indicador con su variación interanual. Navega por las pestañas para el detalle de cada eje. Cada gráfica incluye el enlace directo a su fuente.</div>'+
-    '<div class="kpis">'+k.join('')+'</div>';
-}
-
 /* ================= LABORAL ================= */
 function buildLaboral(){
   const el=document.getElementById('laboral');
+  const pa=DATA.paro_anual||{};
+  const anualHtml=pa.total?('<div class="h2" style="margin-top:22px">Media anual oficial (IECA)</div>'+
+      '<div class="cs" style="margin-bottom:10px">'+geoTag('Marbella')+'Media anual del paro registrado publicada por el IECA.</div>'+
+      '<div class="kpis">'+
+      kpi(fmt(pa.total.v),'Paro medio anual · '+pa.total.y,'',' ')+
+      (pa.mujeres?kpi(fmt(pa.mujeres.v),'Mujeres · '+pa.mujeres.y,'',''):'')+
+      (pa.hombres?kpi(fmt(pa.hombres.v),'Hombres · '+pa.hombres.y,'',''):'')+
+      '</div><div class="src" style="margin-top:-6px">Fuente: <a href="'+SRC_BADEA[1]+'" target="_blank" rel="noopener">'+SRC_BADEA[0]+'</a></div>'):'';
   el.innerHTML='<div class="h2">Mercado laboral · Paro registrado</div>'+
-   '<div class="pdesc">Paro registrado municipal del SEPE (mensual, con desglose por sexo, edad y sector) y media anual oficial del IECA.</div>'+
+   '<div class="pdesc">Paro registrado municipal del SEPE (mensual, con desglose por sexo, edad y sector) y media anual oficial del IECA. Todos los datos referidos al municipio de Marbella.</div>'+
    '<div class="grid">'+
-    card('c_paro','Paro registrado mensual','Personas inscritas en el SEPE al cierre de cada mes, por sexo','live',SRC_SEPE,true)+
-    card('c_paro_sec','Paro por sector de actividad','Distribución del último mes por sector de procedencia','live',SRC_SEPE)+
-    card('c_paro_edad','Paro por tramos de edad','Estructura del último mes — útil para empleo juvenil y senior','live',SRC_SEPE)+
-   '</div>';
+    card('c_paro','Paro registrado mensual',geoTag('Marbella')+'Personas inscritas en el SEPE al cierre de cada mes, por sexo','live',SRC_SEPE,true)+
+    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'Distribución del último mes por sector de procedencia','live',SRC_SEPE)+
+    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'Estructura del último mes — útil para empleo juvenil y senior','live',SRC_SEPE)+
+   '</div>'+anualHtml;
   const s=(DATA.paro_mensual||{}).serie||[];
   if(s.length){
     const L=s.map(x=>lblMes(x.t));
@@ -188,15 +174,6 @@ function buildLaboral(){
     const le=last(s).edad||{};
     barCat('c_paro_edad',['Menor de 25','25 a 44','45 y más'],[le.menor25,le.de25a44,le.mayor45],[COL.c4,COL.c1,COL.c6],'personas');
   }
-  const pa=DATA.paro_anual||{};
-  if(pa.total){
-    el.innerHTML+='<div class="h2" style="margin-top:22px">Media anual oficial (IECA)</div>'+
-      '<div class="kpis">'+
-      kpi(fmt(pa.total.v),'Paro medio anual · '+pa.total.y,'',' ')+
-      (pa.mujeres?kpi(fmt(pa.mujeres.v),'Mujeres · '+pa.mujeres.y,'',''):'')+
-      (pa.hombres?kpi(fmt(pa.hombres.v),'Hombres · '+pa.hombres.y,'',''):'')+
-      '</div><div class="src" style="margin-top:-6px">Fuente: <a href="'+SRC_BADEA[1]+'" target="_blank" rel="noopener">'+SRC_BADEA[0]+'</a></div>';
-  }
 }
 
 /* ================= CONTRATACIÓN ================= */
@@ -206,10 +183,10 @@ function buildContr(){
    '<div class="pdesc">Contratos registrados cada mes diferenciando indefinidos y temporales, por sexo y sector. La reforma laboral de 2022 disparó la contratación indefinida.</div>'+
    '<div id="contr-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_contr','Indefinidos vs. temporales','Contratos iniciales y convertidos por tipo, cada mes','live',SRC_SEPE,true)+
-    card('c_temp','Tasa de temporalidad','% de contratos temporales sobre el total mensual','live',SRC_SEPE)+
-    card('c_contr_sexo','Contratación por sexo y tipo','Indefinidos y temporales del último mes por sexo','live',SRC_SEPE)+
-    card('c_contr_sec','Contratos por sector','Distribución sectorial del último mes','live',SRC_SEPE,true)+
+    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes','live',SRC_SEPE,true)+
+    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual','live',SRC_SEPE)+
+    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo','live',SRC_SEPE)+
+    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'Distribución sectorial del último mes','live',SRC_SEPE,true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
   const cur=last(s),tt=cur.total?cur.temporales/cur.total*100:0;
@@ -237,8 +214,8 @@ function buildComparativa(){
    '<div class="pdesc">Marbella frente a Málaga, Andalucía y España. Agregados calculados desde el mismo fichero del SEPE, por lo que son plenamente comparables.</div>'+
    '<div id="comp-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_comp_paro','Evolución del paro · índice base 100','Cada territorio normalizado a 100 en el primer mes: compara la trayectoria','live',SRC_SEPE,true)+
-    card('c_comp_temp','Tasa de temporalidad comparada','% de contratos temporales sobre el total, mes a mes','live',SRC_SEPE,true)+
+    card('c_comp_paro','Evolución del paro · índice base 100',geoTag('Marbella · Málaga · Andalucía · España')+'Cada territorio normalizado a 100 en el primer mes: compara la trayectoria','live',SRC_SEPE,true)+
+    card('c_comp_temp','Tasa de temporalidad comparada',geoTag('Marbella · Málaga · Andalucía · España')+'% de contratos temporales sobre el total, mes a mes','live',SRC_SEPE,true)+
    '</div>';
   const s=(DATA.comparativa_laboral||{}).serie||[];
   const sp=s.filter(r=>r.paro);
@@ -265,11 +242,11 @@ function buildTurismo(){
   el.innerHTML='<div class="h2">Turismo · motor económico</div>'+
    '<div class="pdesc">Demanda y rentabilidad de hoteles, apartamentos y viviendas de uso turístico, en vivo desde el INE (Marbella es punto turístico con dato propio).</div>'+
    '<div class="grid">'+
-    card('c_tur','Viajeros y pernoctaciones hoteleras','Establecimientos hoteleros de Marbella, serie mensual','live',ineSerie('EOT42428','EOH viajeros'),true)+
-    card('c_adr','Rentabilidad · ADR y RevPAR','Tarifa media diaria e ingreso por habitación disponible (€)','live',ineSerie('EOT43542','EOH ADR'),true)+
-    card('c_ocup','Ocupación y estancia media','Ocupación por plazas (%) y estancia media (días) en hoteles','live',ineSerie('EOT3152','EOH ocupación'))+
-    card('c_alt','Apartamentos y VUT','Viajeros en apartamentos (EOAP) y viviendas de uso turístico','live',ineSerie('EOT41395','EOAP / VUT'))+
-    card('c_turcomp','Marbella vs. Málaga capital','Pernoctaciones hoteleras comparadas','live',ineSerie('EOT42535','EOH Málaga'),true)+
+    card('c_tur','Viajeros y pernoctaciones hoteleras',geoTag('Marbella')+'Establecimientos hoteleros de Marbella, serie mensual','live',ineSerie('EOT42428','EOH viajeros'),true)+
+    card('c_adr','Rentabilidad · ADR y RevPAR',geoTag('Marbella')+'Tarifa media diaria e ingreso por habitación disponible (€)','live',ineSerie('EOT43542','EOH ADR'),true)+
+    card('c_ocup','Ocupación y estancia media',geoTag('Marbella')+'Ocupación por plazas (%) y estancia media (días) en hoteles','live',ineSerie('EOT3152','EOH ocupación'))+
+    card('c_alt','Apartamentos y VUT',geoTag('Marbella')+'Viajeros en apartamentos (EOAP) y viviendas de uso turístico','live',ineSerie('EOT41395','EOAP / VUT'))+
+    card('c_turcomp','Marbella vs. Málaga capital',geoTag('Marbella vs. Málaga capital')+'Pernoctaciones hoteleras comparadas','live',ineSerie('EOT42535','EOH Málaga'),true)+
    '</div>';
   const t=(DATA.turismo&&DATA.turismo.hoteles)||{};
   const via=t.viajeros||[],per=t.pernoctaciones||[];
@@ -300,19 +277,31 @@ function buildTurismo(){
 /* ================= EMPRESAS ================= */
 function buildEmpresas(){
   const el=document.getElementById('empresas');
+  const anios=((DATA.empresas||{}).anios||[]);
   el.innerHTML='<div class="h2">Tejido empresarial</div>'+
    '<div class="pdesc">Número de empresas con actividad en Marbella y su composición sectorial, desde el Directorio Central de Empresas (DIRCE) del INE.</div>'+
    '<div class="grid">'+
-    card('c_emp','Empresas activas','Empresas registradas en el DIRCE, serie anual','stat',ineTbl(4721,'DIRCE (tabla 4721)'),true)+
-    card('c_emp_sec','Composición por rama de actividad','Distribución por gran rama CNAE, último año disponible','stat',ineTbl(4721,'DIRCE (tabla 4721)'),true)+
+    card('c_emp','Empresas activas (evolución)',geoTag('Marbella')+'Total de empresas registradas en el DIRCE, serie anual','stat',ineTbl(4721,'DIRCE (tabla 4721)'),true)+
+   '</div>'+
+   '<div class="toolbar" style="margin-top:18px"><span style="color:var(--mut);font-size:13px">Composición por rama — año:</span>'+
+     '<select id="emp-year" class="btn">'+anios.slice().reverse().map(y=>'<option value="'+y+'">'+y+'</option>').join('')+'</select></div>'+
+   '<div class="grid">'+
+    card('c_emp_sec','Composición por rama de actividad',geoTag('Marbella')+'<span id="emp-sec-year"></span> Distribución de las empresas por gran rama CNAE','stat',ineTbl(4721,'DIRCE (tabla 4721)'),true)+
    '</div>';
   const e=(DATA.empresas||{}).total||[];
   if(e.length){charts.emp=new Chart(c('c_emp'),{type:'line',data:{labels:e.map(x=>x.y),datasets:[ds('Empresas',e.map(x=>x.v),COL.c5,true)]},
     options:baseOpts({plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:axY()}})});}
-  const sec=((DATA.empresas||{}).sectores||[]).slice(0,9);
-  if(sec.length){const pal=[COL.c1,COL.c4,COL.c3,COL.c5,COL.c6,COL.c2,'#5a9bd8','#8fd4c4','#6b7fb3'];
+  const pal=[COL.c1,COL.c4,COL.c3,COL.c5,COL.c6,COL.c2,'#5a9bd8','#8fd4c4','#6b7fb3'];
+  function drawSec(year){
+    if(charts.empsec){try{charts.empsec.destroy()}catch(e){}}
+    const lbl=document.getElementById('emp-sec-year');if(lbl)lbl.textContent='('+year+')';
+    const sec=((DATA.empresas||{}).sectores||[]).map(s=>{const p=s.serie.find(x=>x.y==year);return p?{rama:s.rama,v:p.v}:null;}).filter(Boolean).sort((a,b)=>b.v-a.v).slice(0,9);
+    if(!sec.length)return;
     charts.empsec=new Chart(c('c_emp_sec'),{type:'bar',data:{labels:sec.map(x=>x.rama.length>40?x.rama.slice(0,38)+'…':x.rama),datasets:[{data:sec.map(x=>x.v),backgroundColor:sec.map((x,i)=>pal[i%pal.length])}]},
-      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>sec[i[0].dataIndex].rama,label:x=>fmt(x.parsed.x)+' empresas'}}},scales:{x:axY(),y:{grid:{display:false},ticks:{font:{size:10.5}}}}}});}
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>sec[i[0].dataIndex].rama,label:x=>fmt(x.parsed.x)+' empresas'}}},scales:{x:axY(),y:{grid:{display:false},ticks:{font:{size:10.5}}}}}});
+  }
+  const sel=document.getElementById('emp-year');
+  if(sel){sel.addEventListener('change',()=>drawSec(+sel.value));if(anios.length)drawSec(anios[anios.length-1]);}
 }
 
 /* ================= RENTA ================= */
@@ -321,9 +310,9 @@ function buildRenta(){
   el.innerHTML='<div class="h2">Renta y bienestar</div>'+
    '<div class="pdesc">Renta de los hogares y riesgo de pobreza en Marbella, desde el Atlas de distribución de renta del INE.</div>'+
    '<div class="grid">'+
-    card('c_renta','Renta media anual','Renta neta y bruta por persona y por hogar (€)','stat',ineTbl(30824,'Atlas de renta (tabla 30824)'),true)+
-    card('c_renta_uc','Media vs. mediana por unidad de consumo','Su diferencia indica concentración de renta (desigualdad)','stat',ineTbl(30824,'Atlas de renta (tabla 30824)'))+
-    card('c_pobreza','Riesgo de pobreza relativa','% de población bajo el 60% de la mediana nacional','stat',ineTbl(30831,'Atlas distribución (tabla 30831)'))+
+    card('c_renta','Renta media anual',geoTag('Marbella')+'Renta neta y bruta por persona y por hogar (€)','stat',ineTbl(30824,'Atlas de renta (tabla 30824)'),true)+
+    card('c_renta_uc','Media vs. mediana por unidad de consumo',geoTag('Marbella')+'Su diferencia indica concentración de renta (desigualdad)','stat',ineTbl(30824,'Atlas de renta (tabla 30824)'))+
+    card('c_pobreza','Riesgo de pobreza relativa',geoTag('Marbella')+'% de población bajo el 60% de la mediana nacional','stat',ineTbl(30831,'Atlas distribución (tabla 30831)'))+
    '</div>';
   const r=DATA.renta||{};const np=r.neta_persona||[],nh=r.neta_hogar||[],bp=r.bruta_persona||[];
   if(np.length){charts.renta=new Chart(c('c_renta'),{type:'line',data:{labels:np.map(x=>x.y),datasets:[
@@ -354,9 +343,9 @@ function buildDemografia(){
    '<div class="pdesc">Población, estructura de edad, peso de la población extranjera y composición de los hogares (INE · Atlas).</div>'+
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
-    card('c_pob','Evolución de la población','Población empadronada en Marbella','stat',ineTbl(30832,'Atlas demografía (tabla 30832)'),true)+
-    card('c_nac','Composición por nacionalidad','% de población española y extranjera','stat',ineTbl(30832,'Atlas demografía (tabla 30832)'))+
-    card('c_edad','Estructura de edad','% menores de 18 y de 65 y más años','stat',ineTbl(30832,'Atlas demografía (tabla 30832)'))+
+    card('c_pob','Evolución de la población',geoTag('Marbella')+'Población empadronada en Marbella','stat',ineTbl(30832,'Atlas demografía (tabla 30832)'),true)+
+    card('c_nac','Composición por nacionalidad',geoTag('Marbella')+'% de población española y extranjera','stat',ineTbl(30832,'Atlas demografía (tabla 30832)'))+
+    card('c_edad','Estructura de edad',geoTag('Marbella')+'% menores de 18 y de 65 y más años','stat',ineTbl(30832,'Atlas demografía (tabla 30832)'))+
    '</div>';
   const pob=d.poblacion||[];
   if(pob.length){charts.pob2=new Chart(c('c_pob'),{type:'line',data:{labels:pob.map(x=>x.y),datasets:[ds('Población',pob.map(x=>x.v),COL.c1,true)]},
@@ -378,9 +367,9 @@ function buildVivienda(){
    '<div class="pdesc">Compraventa de viviendas y evolución de precios. La estadística oficial llega a nivel <b>provincial (Málaga)</b> y <b>autonómico (Andalucía)</b> — su máxima desagregación pública.</div>'+
    '<div class="note">Nota: no existe estadística pública de compraventa ni de precio a nivel municipal; se muestra el ámbito provincial/autonómico como referencia del mercado en el que se inserta Marbella.</div>'+
    '<div class="grid">'+
-    card('c_compraventa','Compraventa de viviendas · Málaga','Operaciones mensuales: nueva y de segunda mano','live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
-    card('c_ipv','Precio de la vivienda · IPV Andalucía','Índice de Precios de Vivienda (base 2015=100), trimestral','live',ineTbl(76201,'IPV (tabla 76201)'))+
-    card('c_ipv_var','Variación anual del precio','% de variación interanual del precio de la vivienda','live',ineTbl(76201,'IPV (tabla 76201)'))+
+    card('c_compraventa','Compraventa de viviendas',geoTag('Provincia de Málaga')+'Operaciones mensuales: nueva y de segunda mano','live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
+    card('c_ipv','Precio de la vivienda · IPV',geoTag('Andalucía')+'Índice de Precios de Vivienda (base 2015=100), trimestral','live',ineTbl(76201,'IPV (tabla 76201)'))+
+    card('c_ipv_var','Variación anual del precio',geoTag('Andalucía')+'% de variación interanual del precio de la vivienda','live',ineTbl(76201,'IPV (tabla 76201)'))+
    '</div>';
   const v=DATA.vivienda||{};const cv=v.compraventa||{};
   const gen=cv.general||[],nu=cv.nueva||[],sm=cv.segunda_mano||[];
@@ -405,7 +394,7 @@ function barCat(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{la
 function barCatH(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
 
 /* ---------- navegación ---------- */
-const BUILD={resumen:buildResumen,laboral:buildLaboral,contratacion:buildContr,comparativa:buildComparativa,turismo:buildTurismo,empresas:buildEmpresas,renta:buildRenta,demografia:buildDemografia,vivienda:buildVivienda};
+const BUILD={laboral:buildLaboral,contratacion:buildContr,comparativa:buildComparativa,turismo:buildTurismo,empresas:buildEmpresas,renta:buildRenta,demografia:buildDemografia,vivienda:buildVivienda};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));
@@ -416,9 +405,9 @@ function buildNav(){document.getElementById('nav').innerHTML=SECTIONS.map(([id,t
 document.getElementById('refresh').addEventListener('click',async()=>{
   Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});
   for(const k in charts)delete charts[k];for(const k in rendered)delete rendered[k];
-  await loadData();show(document.querySelector('section.active')?.id||'resumen');
+  await loadData();show(document.querySelector('section.active')?.id||SECTIONS[0][0]);
 });
-(async function(){buildNav();await loadData();show('resumen');})();
+(async function(){buildNav();await loadData();show(SECTIONS[0][0]);})();
 </script>
 </body>
 </html>

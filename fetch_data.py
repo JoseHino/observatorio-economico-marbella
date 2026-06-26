@@ -195,26 +195,28 @@ def empresas():
     except Exception as e:
         print(f"    ! {e}"); write("empresas.json", {}); return
     total = serie_anual_from(j, "total cnae")
-    # composición por rama CNAE: último valor de cada serie que no sea el total
+    # composición por rama CNAE: serie anual COMPLETA de cada rama (no solo el último año)
     sectores = []
+    anios = set()
     for s in j:
         nom = s["Nombre"]
         low = nom.lower()
         if "total cnae" in low:
             continue
-        pts = [p for p in s["Data"] if p.get("Valor") is not None]
+        pts = [{"y": int(p["Anyo"]), "v": round(p["Valor"])}
+               for p in s["Data"] if p.get("Valor") is not None]
         if not pts:
             continue
-        last = max(pts, key=lambda p: int(p["Anyo"]))
+        pts.sort(key=lambda x: x["y"])
+        anios.update(p["y"] for p in pts)
         # nombre legible de la rama: trozo entre "Total de empresas." y "Empresas."
         rama = nom
         if "total de empresas." in low:
             rama = nom.split("Total de empresas.", 1)[1]
         rama = rama.replace("Empresas.", "").strip(" .")
-        if rama and last["Valor"]:
-            sectores.append({"rama": rama, "v": round(last["Valor"]), "y": int(last["Anyo"])})
-    sectores.sort(key=lambda x: x["v"], reverse=True)
-    write("empresas.json", {"total": total, "sectores": sectores})
+        if rama:
+            sectores.append({"rama": rama, "serie": pts})
+    write("empresas.json", {"total": total, "sectores": sectores, "anios": sorted(anios)})
 
 # ---------------------------------------------------------------- VIVIENDA (INE ETDP + IPV)
 def vivienda():
