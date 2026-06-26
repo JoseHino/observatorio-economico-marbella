@@ -231,6 +231,22 @@ def vivienda():
     }
     write("vivienda.json", data)
 
+# ---------------------------------------------------------------- SOCIEDADES MERCANTILES (INE SM, provincial)
+def sociedades():
+    step("Sociedades mercantiles · INE SM (provincia de Málaga)")
+    cods = {
+        "constituidas":         "SM18034",  # nº sociedades creadas
+        "disueltas":            "SM18030",  # nº sociedades disueltas
+        "aumento_capital":      "SM18033",  # nº que amplían capital
+        "capital_constituidas": "SM18349",  # capital suscrito (miles €)
+    }
+    data = {k: ine_mensual(c) for k, c in cods.items()}
+    # saldo neto mensual (creadas - disueltas) alineado por mes
+    cre = {p["t"]: p["v"] for p in data["constituidas"]}
+    dis = {p["t"]: p["v"] for p in data["disueltas"]}
+    data["saldo_neto"] = [{"t": t, "v": cre[t] - dis.get(t, 0)} for t in sorted(cre)]
+    write("sociedades.json", data)
+
 # ---------------------------------------------------------------- PARO ANUAL (BADEA)
 def paro_badea():
     step("Paro registrado · IECA/BADEA (media anual municipal)")
@@ -374,7 +390,7 @@ def sepe_laboral():
 def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
-    for fn in (turismo, renta, demografia, empresas, vivienda, paro_badea, sepe_laboral):
+    for fn in (turismo, renta, demografia, empresas, vivienda, sociedades, paro_badea, sepe_laboral):
         try:
             fn()
         except Exception as e:
