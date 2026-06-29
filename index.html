@@ -67,6 +67,7 @@ Indicadores socioeconómicos oficiales del municipio de Marbella (29069) para la
 </div>
 
 <section id="laboral"></section>
+<section id="afiliacion"></section>
 <section id="contratacion"></section>
 <section id="comparativa"></section>
 <section id="turismo"></section>
@@ -80,7 +81,8 @@ Indicadores socioeconómicos oficiales del municipio de Marbella (29069) para la
 <b>Fuentes:</b>
 <a href="https://www.ine.es/" target="_blank">INE</a> (Atlas de renta, DIRCE, EOH/EOAP/VUT, ETDP, IPV, Tempus3) ·
 <a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/" target="_blank">IECA · BADEA</a> ·
-<a href="https://sede.sepe.gob.es/es/portaltrabaja/inicio/comunicacion/datos-estadisticos/datos-abiertos.html" target="_blank">SEPE · datos abiertos</a>.<br>
+<a href="https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html" target="_blank">SEPE · datos abiertos</a> ·
+<a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323" target="_blank">IECA · Afiliación a la Seguridad Social</a>.<br>
 El proceso de actualización (<code>fetch_data.py</code>) se ejecuta en GitHub Actions y vuelca los datos a <code>/data/*.json</code>, leídos desde el mismo origen. La comparativa territorial (Marbella · Málaga · Andalucía · España) se calcula agregando el mismo fichero municipal del SEPE, por lo que las cifras son plenamente comparables. La compraventa de vivienda y el IPV se ofrecen a nivel provincial (Málaga) y autonómico (Andalucía), su máxima desagregación oficial.
 </footer>
 
@@ -97,8 +99,9 @@ const pct=(c,p)=>(p==null||!p)?null:(c-p)/p*100;
 const DATA={}, charts={}, rendered={};
 
 /* ---------- fuentes (enlace directo por gráfica) ---------- */
-const SRC_SEPE=['SEPE · datos abiertos','https://sede.sepe.gob.es/es/portaltrabaja/inicio/comunicacion/datos-estadisticos/datos-abiertos.html'];
-const SRC_BADEA=['IECA · BADEA (paro registrado municipal, consulta 37016)','https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual/37016'];
+const SRC_SEPE=['SEPE · datos abiertos (paro y contratos por municipios)','https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html'];
+const SRC_BADEA=['IECA · BADEA (paro registrado municipal, consulta 37016)','https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?idConsulta=37016'];
+const SRC_AFI=['IECA · BADEA (afiliación a la Seguridad Social, op. b3_291)','https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323'];
 const ineTbl=(id,txt)=>['INE · '+(txt||('tabla '+id)),'https://www.ine.es/jaxiT3/Tabla.htm?t='+id];
 const ineSerie=(cod,txt)=>['INE Tempus3 · '+(txt||('serie '+cod)),'https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/'+cod+'?nult=24'];
 
@@ -117,7 +120,7 @@ const axY=(cb)=>({grid:GRID,ticks:{maxTicksLimit:6,callback:cb||(v=>abbr(v))}});
 const baseOpts=(extra={})=>Object.assign({responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false}},extra);
 
 /* ---------- estructura ---------- */
-const SECTIONS=[['laboral','Mercado laboral'],['contratacion','Contratación'],
+const SECTIONS=[['laboral','Mercado laboral'],['afiliacion','Afiliación S. Social'],['contratacion','Contratación'],
  ['comparativa','Comparativa territorial'],['turismo','Turismo'],['empresas','Tejido empresarial'],
  ['renta','Renta y bienestar'],['demografia','Demografía'],['vivienda','Vivienda']];
 const geoTag=t=>'<span class="tag geo">'+t+'</span>';
@@ -135,7 +138,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -176,6 +179,67 @@ function buildLaboral(){
     const le=last(s).edad||{};
     barCat('c_paro_edad',['Menor de 25','25 a 44','45 y más'],[le.menor25,le.de25a44,le.mayor45],[COL.c4,COL.c1,COL.c6],'personas');
   }
+}
+
+/* ================= AFILIACIÓN SEG. SOCIAL ================= */
+const AFI_REGS=[['general','General y Carbón',COL.c1],['autonomos','Autónomos',COL.c4],
+ ['agrario','Agrario (SEA)',COL.c3],['hogar','Empleados del hogar',COL.c6],['mar','Mar',COL.c5]];
+const afiClean=a=>(a||[]).filter(p=>p&&p.v!=null);
+const afiLast=a=>{const c=afiClean(a);return c.length?c[c.length-1]:null;};
+function buildAfiliacion(){
+  const el=document.getElementById('afiliacion');
+  const A=DATA.afiliacion||{};const mb=A.marbella||{};
+  const tot=afiLast(mb.total),aut=afiLast(mb.autonomos),gen=afiLast(mb.general);
+  const totPrev=(()=>{const c=afiClean(mb.total);return c.length>12?c[c.length-13]:null;})();
+  const dTot=tot&&totPrev?pct(tot.v,totPrev.v):null;const[dTxt,dCls]=deltaTxt(dTot);
+  const pctAut=tot&&aut?aut.v/tot.v*100:null;
+  const k=[];
+  if(tot)k.push(kpi(fmt(tot.v),'Afiliados a la Seg. Social · '+lblMes(tot.t),dTxt,dCls));
+  if(aut)k.push(kpi(fmt(aut.v),'Autónomos (RETA) · '+lblMes(aut.t),'',''));
+  if(pctAut!=null)k.push(kpi(fmt(pctAut,1)+' %','Peso de autónomos sobre el total','',''));
+  if(gen)k.push(kpi(fmt(gen.v),'Régimen General','',''));
+  el.innerHTML='<div class="h2">Afiliación a la Seguridad Social</div>'+
+   '<div class="pdesc">Trabajadores afiliados en alta laboral que <b>residen en Marbella</b>, con desglose por régimen (General, Autónomos, Sistema Especial Agrario, Mar y Empleados del Hogar). Fuente: explotación del IECA de los registros de la Tesorería General de la Seguridad Social.</div>'+
+   '<div class="kpis">'+k.join('')+'</div>'+
+   '<div class="grid">'+
+    card('c_afi_tot','Evolución de afiliados',geoTag('Marbella')+'Total de afiliados a la Seguridad Social, fin de cada periodo'+nota('Mensual desde jul-2021; trimestral antes (2012-2021). IECA · afiliación.'),'live',SRC_AFI,true)+
+    card('c_afi_reg','Composición por régimen',geoTag('Marbella')+'<span id="afi-reg-mes"></span> Reparto de los afiliados por régimen'+nota('Mensual. Refleja el último periodo disponible.'),'live',SRC_AFI)+
+    card('c_afi_auto','Autónomos (RETA)',geoTag('Marbella')+'Afiliados en el Régimen Especial de Trabajadores Autónomos'+nota('Mensual. IECA · afiliación.'),'live',SRC_AFI)+
+    card('c_afi_evo','Evolución por régimen',geoTag('Marbella')+'Composición de la afiliación por régimen a lo largo del tiempo (apilado)'+nota('Mensual desde jul-2021; trimestral antes. Los cinco regímenes suman el total de afiliados. El General incluye el Régimen Especial de la Minería del Carbón (residual).'),'live',SRC_AFI,true)+
+   '</div>'+
+   '<div class="h2" style="margin-top:24px">Comparativa territorial</div>'+
+   '<div class="pdesc">Marbella frente a la provincia de Málaga y al conjunto de Andalucía, con la misma fuente y metodología (afiliados por municipio/territorio de residencia).</div>'+
+   '<div class="grid">'+
+    card('c_afi_idx','Evolución comparada · índice base 100',geoTag('Marbella · Málaga · Andalucía')+'Cada territorio normalizado a 100 en el primer periodo común'+nota('Mensual. Permite comparar la trayectoria del empleo afiliado.'),'live',SRC_AFI,true)+
+    card('c_afi_pctaut','Peso de los autónomos comparado',geoTag('Marbella · Málaga · Andalucía')+'% de afiliados en el régimen de autónomos sobre el total'+nota('Mensual. Misma metodología en los tres ámbitos.'),'live',SRC_AFI,true)+
+   '</div>';
+  if(!mb.total){el.innerHTML+='<div class="note">No hay datos de afiliación disponibles todavía.</div>';return;}
+  // evolución total
+  const ct=afiClean(mb.total);
+  if(ct.length){charts.afitot=new Chart(c('c_afi_tot'),{type:'line',data:{labels:ct.map(x=>lblMes(x.t)),datasets:[ds('Afiliados',ct.map(x=>x.v),COL.c1,true)]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+  // doughnut composición por régimen (último periodo)
+  const mes=tot?lblMes(tot.t):'';const lbl=document.getElementById('afi-reg-mes');if(lbl)lbl.textContent='('+mes+')';
+  doughnut('c_afi_reg',AFI_REGS.map(([key,nm,col])=>[nm,(afiLast(mb[key])||{}).v,col]));
+  // autónomos
+  const ca=afiClean(mb.autonomos);
+  if(ca.length){charts.afiauto=new Chart(c('c_afi_auto'),{type:'line',data:{labels:ca.map(x=>lblMes(x.t)),datasets:[ds('Autónomos',ca.map(x=>x.v),COL.c4,true)]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+  // evolución por régimen (área apilada) — usar el eje temporal del total
+  const L=ct.map(x=>x.t);
+  const byT=key=>{const m=Object.fromEntries(afiClean(mb[key]).map(p=>[p.t,p.v]));return L.map(t=>m[t]??null);};
+  charts.afievo=new Chart(c('c_afi_evo'),{type:'line',data:{labels:L.map(lblMes),datasets:AFI_REGS.map(([key,nm,col])=>({
+    label:nm,data:byT(key),borderColor:col,backgroundColor:hexA(col,.5),fill:true,borderWidth:1,pointRadius:0,tension:.2,stack:'a'}))},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:Object.assign({stacked:true},axY())}})});
+  // comparativa territorial
+  const T={marbella:['Marbella',COL.accent,3],malaga:['Málaga',COL.c1,1.6],andalucia:['Andalucía',COL.c6,1.6]};
+  // periodos comunes (los del total de Marbella)
+  const idxLine=(terr)=>{const m=Object.fromEntries(afiClean((A[terr]||{}).total).map(p=>[p.t,p.v]));const arr=L.map(t=>m[t]??null);return indexar(arr);};
+  charts.afiidx=new Chart(c('c_afi_idx'),{type:'line',data:{labels:L.map(lblMes),datasets:Object.keys(T).map(terr=>{const[nm,col,w]=T[terr];return{label:nm,data:idxLine(terr),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25};})},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});
+  const pctAutLine=(terr)=>{const o=A[terr]||{};const mt=Object.fromEntries(afiClean(o.total).map(p=>[p.t,p.v]));const ma=Object.fromEntries(afiClean(o.autonomos).map(p=>[p.t,p.v]));return L.map(t=>(mt[t]&&ma[t]!=null)?+(ma[t]/mt[t]*100).toFixed(1):null);};
+  charts.afipct=new Chart(c('c_afi_pctaut'),{type:'line',data:{labels:L.map(lblMes),datasets:Object.keys(T).map(terr=>{const[nm,col,w]=T[terr];return{label:nm,data:pctAutLine(terr),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25};})},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})});
 }
 
 /* ================= CONTRATACIÓN ================= */
@@ -408,7 +472,7 @@ function barCat(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{la
 function barCatH(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
 
 /* ---------- navegación ---------- */
-const BUILD={laboral:buildLaboral,contratacion:buildContr,comparativa:buildComparativa,turismo:buildTurismo,empresas:buildEmpresas,renta:buildRenta,demografia:buildDemografia,vivienda:buildVivienda};
+const BUILD={laboral:buildLaboral,afiliacion:buildAfiliacion,contratacion:buildContr,comparativa:buildComparativa,turismo:buildTurismo,empresas:buildEmpresas,renta:buildRenta,demografia:buildDemografia,vivienda:buildVivienda};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));

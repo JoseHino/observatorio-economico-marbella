@@ -28,10 +28,20 @@ CCAA  = "1"       # comunidad autónoma Andalucía
 BADEA_MARBELLA = "2980"
 UA = {"User-Agent": "Mozilla/5.0 (ObservatorioMarbella; +github-actions)"}
 
-def _get(url, timeout=120):
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+def _get(url, timeout=120, retries=3, backoff=2.0):
+    """GET con reintentos: tolera cortes de red transitorios (DNS, timeouts)."""
+    last = None
+    for intento in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read()
+        except Exception as e:
+            last = e
+            if intento < retries - 1:
+                import time
+                time.sleep(backoff * (intento + 1))
+    raise last
 
 def get_json(url):
     return json.loads(_get(url).decode("utf-8"))
@@ -386,11 +396,108 @@ def sepe_laboral():
         comp.append(row)
     write("comparativa_laboral.json", {"serie": comp})
 
+# ------------------------------------- AFILIACIÓN SEG. SOCIAL (IECA/BADEA b3_291)
+# "Afiliados a la Seguridad Social en alta laboral que trabajan en Andalucía".
+# Consulta 876 = Afiliaciones por municipio de RESIDENCIA, por régimen (ambos sexos).
+# Mensual (último día del mes) desde jul-2021; trimestral antes (desde 2012).
+BADEA_REST = ("https://www.juntadeandalucia.es/institutodeestadisticaycartografia/"
+              "intranet/admin/rest/v1.0")
+AFI_CONSULTA = "876"
+AFI_TERR = {"marbella": "2980", "malaga": "3023", "andalucia": "3143"}  # nodos jerarquía 163
+AFI_REGS = ("total", "general", "autonomos", "agrario", "mar", "hogar")
+
+def _afi_reg_key(des):
+    d = (des or "").lower()
+    if "total" in d:                       return "total"
+    if "agrario" in d:                     return "agrario"
+    if "aut" in d and "nomo" in d:         return "autonomos"
+    if "del mar" in d or d.strip().endswith("mar"): return "mar"
+    if "hogar" in d:                       return "hogar"
+    if "general" in d:                     return "general"
+    return None
+
+def _afi_periodos():
+    """[(idNodo, 'YYYY-MM')] de periodos disponibles, en orden cronológico."""
+    j = get_json(f"{BADEA_REST}/jerarquia/3153?consultaId={AFI_CONSULTA}&alias=D_TEMPORAL_0")
+    out = []
+    def flat(n):
+        for x in (n if isinstance(n, list) else [n]):
+            cod = str(x.get("cod") or "")
+            if cod.isdigit() and len(cod) == 6 and 2010 <= int(cod[:4]) <= 2035:
+                out.append((x.get("id"), f"{cod[:4]}-{cod[4:6]}"))
+            for c in (x.get("children") or []):
+                flat(c)
+    flat(j.get("data") or j)
+    seen, res = set(), []
+    for i, t in sorted(out, key=lambda z: z[1]):
+        if t in seen:
+            continue
+        seen.add(t); res.append((i, t))
+    return res
+
+def _afi_val(cell):
+    try:
+        return round(float(cell.get("val")))
+    except (TypeError, ValueError, AttributeError):
+        return 0
+
+def _afi_periodo(pid, t):
+    """Un solo request (todos los municipios de ese periodo). Extrae Marbella y
+    agrega la provincia de Málaga (cód. prov. '29') y Andalucía (suma de todos los
+    municipios; el producto es 'residencia en Andalucía', así que la suma municipal
+    es el total autonómico — la fila '00' es el TOTAL e incluye 'Resto de España')."""
+    j = get_json(f"{BADEA_REST}/consulta/{AFI_CONSULTA}?D_TEMPORAL_0={pid}")
+    out = {ter: {k: 0 for k in AFI_REGS} for ter in AFI_TERR}
+    mb_seen = False
+    for r in j.get("data", []):
+        cod = r[0].get("cod") or []
+        if len(cod) != 5:                                   # solo filas municipales
+            continue
+        k = _afi_reg_key(r[1].get("des", ""))
+        if not k:
+            continue
+        v = _afi_val(r[4])
+        out["andalucia"][k] += v                            # todos los municipios = Andalucía
+        if cod[3] == PROV:                                  # provincia de Málaga
+            out["malaga"][k] += v
+        if cod[4] == MUN:                                   # Marbella
+            out["marbella"][k] = v; mb_seen = True
+    return t, out, (mb_seen and out["andalucia"]["total"] > 0)
+
+def afiliacion():
+    step("Afiliación a la Seguridad Social · IECA/BADEA (b3_291, municipal por régimen)")
+    periodos = _afi_periodos()
+    if not periodos:
+        print("    ! no se pudieron obtener periodos"); write("afiliacion.json", {}); return
+    print(f"    · {len(periodos)} periodos ({periodos[0][1]} → {periodos[-1][1]}) · descargando en paralelo…")
+    from concurrent.futures import ThreadPoolExecutor
+    res = {}
+    def task(pt):
+        pid, t = pt
+        try:
+            return _afi_periodo(pid, t)
+        except Exception as e:
+            print(f"      · {t}: {e}"); return t, None, False
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for t, out, ok in ex.map(task, periodos):
+            if out and ok:
+                res[t] = out
+    periodos_ok = [t for _, t in periodos if t in res]
+    data = {ter: {k: [{"t": t, "v": res[t][ter][k]} for t in periodos_ok] for k in AFI_REGS}
+            for ter in AFI_TERR}
+    for ter in AFI_TERR:
+        tot = data[ter]["total"]
+        print(f"    · {ter}: {len(tot)} puntos · último total = {tot[-1]['v'] if tot else '—'}")
+    data["periodos"] = periodos_ok
+    data["ambito"] = ("Afiliados por municipio de residencia (Marbella); "
+                      "agregados de la provincia de Málaga y de Andalucía para comparar")
+    write("afiliacion.json", data)
+
 # ---------------------------------------------------------------- MAIN
 def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
-    for fn in (turismo, renta, demografia, empresas, vivienda, sociedades, paro_badea, sepe_laboral):
+    for fn in (turismo, renta, demografia, empresas, vivienda, sociedades, paro_badea, afiliacion, sepe_laboral):
         try:
             fn()
         except Exception as e:
@@ -398,7 +505,7 @@ def main():
             print(f"    !! fallo en {fn.__name__}: {e}")
     meta = {
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "fuentes": ["INE Tempus3", "IECA/BADEA", "SEPE datos abiertos"],
+        "fuentes": ["INE Tempus3", "IECA/BADEA (paro + afiliación SS)", "SEPE datos abiertos"],
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
     }
