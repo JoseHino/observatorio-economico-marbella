@@ -42,6 +42,10 @@ section{display:none} section.active{display:block;animation:f .35s}
 .tag.live{color:#37e0a0;border-color:#1d6b4e} .tag.stat{color:#ffce56;border-color:#6b5b1d}
 .tag.geo{color:#9fc7ff;border-color:#2e4a7a;background:rgba(54,162,235,.08)}
 .nota{display:block;margin-top:5px;color:#7e93b8;font-size:11px;font-style:italic;line-height:1.4}
+.cult{display:inline-block;margin-top:6px;font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:10px;
+  color:#8fe9d0;background:rgba(58,214,192,.10);border:1px solid rgba(58,214,192,.32);letter-spacing:.2px}
+.cult.old{color:#ffce56;background:rgba(255,206,86,.08);border-color:#6b5b1d}
+.cult .pp{color:#7e93b8;font-weight:500}
 select.btn{appearance:auto}
 .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
 .btn{background:var(--panel2);color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:9px;cursor:pointer;font-size:13px}
@@ -128,9 +132,61 @@ const nota=t=>'<span class="nota">⏱ '+t+'</span>';
 
 function card(id,title,sub,tag,src,full){
   return '<div class="card'+(full?' full':'')+'"><h3>'+title+'</h3>'+
-    '<div class="cs"><span class="tag '+(tag==='live'?'live':'stat')+'">'+(tag==='live'?'DINÁMICO':'ANUAL')+'</span>'+sub+'</div>'+
+    '<div class="cs"><span class="tag '+(tag==='live'?'live':'stat')+'">'+(tag==='live'?'DINÁMICO':'ANUAL')+'</span>'+sub+
+    '<span class="cult" id="cult-'+id+'"></span></div>'+
     '<div class="cwrap"><canvas id="'+id+'"></canvas></div>'+
     '<div class="src">Fuente: <a href="'+src[1]+'" target="_blank" rel="noopener">'+src[0]+'</a></div></div>';
+}
+/* ---------- periodicidad + último dato por gráfico ---------- */
+const TRIM={ '03':'1T','06':'2T','09':'3T','12':'4T' };
+function fmtUlt(t,tipo){
+  if(t==null) return '';
+  if(tipo==='anual') return String(t).slice(0,4);
+  const s=String(t), a=s.slice(0,4), m=s.slice(5,7);
+  if(tipo==='trim') return (TRIM[m]||('mes '+m))+' '+a;
+  return MESES[+m-1]+' '+a;                       // mensual
+}
+const PER_LBL={mes:'Mensual',trim:'Trimestral',anual:'Anual'};
+// mapea id de gráfico -> [periodicidad, () => último periodo en los datos]
+const lastT=arr=>{const x=last(arr);return x?x.t:null;};
+const lastY=arr=>{const x=last(arr);return x?x.y:null;};
+function CARD_ULT(){
+  const D=DATA, T=(D.turismo||{}), V=(D.vivienda||{}), S=(D.sociedades||{});
+  const pmT=D.paro_mensual&&D.paro_mensual.serie?last(D.paro_mensual.serie).t:null;
+  const cmT=D.contratos_mensual&&D.contratos_mensual.serie?last(D.contratos_mensual.serie).t:null;
+  const cpT=D.comparativa_laboral&&D.comparativa_laboral.serie?last(D.comparativa_laboral.serie).t:null;
+  const afT=D.afiliacion&&D.afiliacion.periodos?last(D.afiliacion.periodos):null;
+  const turT=T.hoteles&&T.hoteles.viajeros?lastT(T.hoteles.viajeros):null;
+  const cvT=V.compraventa&&V.compraventa.general?lastT(V.compraventa.general):null;
+  const ipvT=V.precio&&V.precio.indice?lastT(V.precio.indice):null;
+  const socT=S.constituidas?lastT(S.constituidas):null;
+  const empY=D.empresas&&D.empresas.total?lastY(D.empresas.total):null;
+  const renY=D.renta&&D.renta.neta_persona?lastY(D.renta.neta_persona):null;
+  const demY=D.demografia&&D.demografia.poblacion?lastY(D.demografia.poblacion):null;
+  const M=(t)=>['mes',t], TR=(t)=>['trim',t], AN=(y)=>['anual',y];
+  return {
+    c_paro:M(pmT), c_paro_sec:M(pmT), c_paro_edad:M(pmT),
+    c_afi_tot:M(afT), c_afi_reg:M(afT), c_afi_auto:M(afT), c_afi_evo:M(afT), c_afi_idx:M(afT), c_afi_pctaut:M(afT),
+    c_contr:M(cmT), c_temp:M(cmT), c_contr_sexo:M(cmT), c_contr_sec:M(cmT),
+    c_comp_paro:M(cpT), c_comp_temp:M(cpT),
+    c_tur:M(turT), c_adr:M(turT), c_ocup:M(turT), c_alt:M(turT), c_turcomp:M(turT),
+    c_emp:AN(empY), c_emp_sec:AN(empY),
+    c_soc:M(socT), c_soc_saldo:M(socT),
+    c_renta:AN(renY), c_renta_uc:AN(renY), c_pobreza:AN(renY),
+    c_pob:AN(demY), c_nac:AN(demY), c_edad:AN(demY),
+    c_compraventa:M(cvT), c_ipv:TR(ipvT), c_ipv_var:TR(ipvT),
+  };
+}
+function fillUlt(){
+  const reg=CARD_ULT(); const hoy=new Date();
+  for(const id in reg){
+    const el=document.getElementById('cult-'+id); if(!el) continue;
+    const [tipo,val]=reg[id]; if(val==null){el.style.display='none';continue;}
+    el.innerHTML='<span class="pp">'+PER_LBL[tipo]+' · último dato:</span> '+fmtUlt(val,tipo);
+    // marca en ámbar si un mensual se retrasa más de 3 meses (posible incidencia)
+    if(tipo==='mes'){const a=+String(val).slice(0,4),m=+String(val).slice(5,7);
+      const desf=(hoy.getFullYear()-a)*12+(hoy.getMonth()+1-m); el.classList.toggle('old',desf>4);}
+  }
 }
 function kpi(v,l,d,dcls){return '<div class="kpi"><div class="v">'+v+'</div><div class="l">'+l+'</div>'+(d?'<div class="d '+(dcls||'')+'">'+d+'</div>':'')+'</div>';}
 function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&&!inv)||(d<0&&inv);const ar=d>0?'▲':(d<0?'▼':'■');return[ar+' '+fmt(Math.abs(d),1)+'% vs. año ant.',Math.abs(d)<0.05?'':(good?'good':'bad')];}
@@ -357,8 +413,8 @@ function buildEmpresas(){
    '<div class="h2" style="margin-top:24px">Dinamismo empresarial · Sociedades mercantiles</div>'+
    '<div class="pdesc">Creación y disolución de sociedades mercantiles. La estadística del INE llega a nivel <b>provincial (Málaga)</b>; no se publica por municipio.</div>'+
    '<div class="grid">'+
-    card('c_soc','Sociedades creadas vs. disueltas',geoTag('Provincia de Málaga')+'Sociedades mercantiles constituidas y disueltas cada mes'+nota('Mensual. INE · Estadística de Sociedades Mercantiles.'),'live',ineSerie('SM18034','Sociedades Mercantiles'),true)+
-    card('c_soc_saldo','Saldo neto de sociedades',geoTag('Provincia de Málaga')+'Creadas menos disueltas: dinamismo neto del tejido societario'+nota('Mensual. INE · Sociedades Mercantiles.'),'live',ineSerie('SM18034','Sociedades Mercantiles'),true)+
+    card('c_soc','Sociedades creadas vs. disueltas',geoTag('Provincia de Málaga')+'Sociedades mercantiles constituidas y disueltas cada mes'+nota('Mensual. INE · Estadística de Sociedades Mercantiles.'),'live',ineSerie('SM25051','Sociedades Mercantiles'),true)+
+    card('c_soc_saldo','Saldo neto de sociedades',geoTag('Provincia de Málaga')+'Creadas menos disueltas: dinamismo neto del tejido societario'+nota('Mensual. INE · Sociedades Mercantiles.'),'live',ineSerie('SM25051','Sociedades Mercantiles'),true)+
    '</div>';
   const e=(DATA.empresas||{}).total||[];
   if(e.length){charts.emp=new Chart(c('c_emp'),{type:'line',data:{labels:e.map(x=>x.y),datasets:[ds('Empresas',e.map(x=>x.v),COL.c5,true)]},
@@ -477,6 +533,7 @@ function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));
   if(BUILD[id]&&!rendered[id]){try{BUILD[id]();rendered[id]=true;}catch(e){console.error(e);}}
+  try{fillUlt();}catch(e){console.error(e);}
 }
 function buildNav(){document.getElementById('nav').innerHTML=SECTIONS.map(([id,t])=>'<button data-s="'+id+'">'+t+'</button>').join('');
   document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.s)));}
