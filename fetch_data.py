@@ -244,11 +244,13 @@ def vivienda():
 # ---------------------------------------------------------------- SOCIEDADES MERCANTILES (INE SM, provincial)
 def sociedades():
     step("Sociedades mercantiles · INE SM (provincia de Málaga)")
+    # OJO: el INE renumera estas series al rebasarlas; los códigos SM180xx quedaron
+    # congelados en 2025-03. Estos son los vigentes (Málaga, mensual), verificados.
     cods = {
-        "constituidas":         "SM18034",  # nº sociedades creadas
-        "disueltas":            "SM18030",  # nº sociedades disueltas
-        "aumento_capital":      "SM18033",  # nº que amplían capital
-        "capital_constituidas": "SM18349",  # capital suscrito (miles €)
+        "constituidas":         "SM25051",  # nº sociedades creadas
+        "disueltas":            "SM8835",   # nº sociedades disueltas
+        "aumento_capital":      "SM25912",  # nº que amplían capital
+        "capital_constituidas": "SM25522",  # capital suscrito (miles €)
     }
     data = {k: ine_mensual(c) for k, c in cods.items()}
     # saldo neto mensual (creadas - disueltas) alineado por mes
@@ -609,6 +611,67 @@ def afiliacion():
                       "agregados de la provincia de Málaga y de Andalucía para comparar")
     write("afiliacion.json", data)
 
+# ---------------------------------------------------------------- VIGILANTE DE FRESCURA
+# Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
+# obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
+# sin que nadie lo descubra por casualidad. Los anuales llevan una tolerancia alta.
+_FRESCURA_MAX = {
+    "paro_mensual.json": 2, "contratos_mensual.json": 2, "comparativa_laboral.json": 3,
+    "afiliacion.json": 4, "sociedades.json": 4, "turismo.json": 3, "vivienda.json": 7,
+    "paro_anual.json": 16, "empresas.json": 20, "renta.json": 32, "demografia.json": 32,
+}
+
+def _ultimo_periodo(obj):
+    """Mayor periodo ('YYYY' o 'YYYY-MM') hallado recursivamente en un JSON."""
+    best = [None]
+    def upd(v):
+        if v is None: return
+        s = str(v)
+        if len(s) == 4 and s.isdigit(): s = s + "-13"   # un año ordena tras sus meses
+        if best[0] is None or s > best[0]: best[0] = s
+    def walk(x):
+        if isinstance(x, dict):
+            if "t" in x: upd(x["t"])
+            if isinstance(x.get("y"), (int, str)): upd(str(x["y"]))
+            for v in x.values(): walk(v)
+        elif isinstance(x, list):
+            for v in x: walk(v)
+    walk(obj)
+    s = best[0]
+    return s[:7] if s and not s.endswith("-13") else (s[:4] if s else None)
+
+def _meses_desde(periodo, hoy):
+    if not periodo: return 999
+    y = int(periodo[:4]); m = int(periodo[5:7]) if len(periodo) >= 7 else 12
+    return (hoy.year - y) * 12 + (hoy.month - m)
+
+def auditar_frescura():
+    """Revisa la antigüedad de cada fichero de datos y avisa de los obsoletos.
+    Devuelve un dict {fichero: {ultimo, desfase_meses, obsoleto}} para meta.json."""
+    step("Auditoría de frescura de los indicadores")
+    hoy = datetime.date.today()
+    rep, alertas = {}, []
+    for name in sorted(os.listdir(OUT)):
+        if not name.endswith(".json") or name in ("meta.json",):
+            continue
+        try:
+            obj = json.load(io.open(os.path.join(OUT, name), encoding="utf-8"))
+        except Exception:
+            continue
+        ult = _ultimo_periodo(obj)
+        desf = _meses_desde(ult, hoy)
+        tope = _FRESCURA_MAX.get(name, 6)
+        obsoleto = desf > tope
+        rep[name] = {"ultimo": ult, "desfase_meses": desf, "obsoleto": obsoleto}
+        flag = "  ⚠ OBSOLETO" if obsoleto else ""
+        print(f"    · {name:28s} último={ult} ({desf} meses){flag}")
+        if obsoleto:
+            alertas.append(f"{name} (último {ult}, {desf} meses)")
+    if alertas:
+        print("    !! INDICADORES POSIBLEMENTE OBSOLETOS (revisar códigos de fuente):")
+        for a in alertas: print(f"       - {a}")
+    return rep
+
 # ---------------------------------------------------------------- MAIN
 def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
@@ -619,11 +682,16 @@ def main():
         except Exception as e:
             errors += 1
             print(f"    !! fallo en {fn.__name__}: {e}")
+    try:
+        frescura = auditar_frescura()
+    except Exception as e:
+        frescura = {}; print(f"    !! fallo en auditar_frescura: {e}")
     meta = {
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "fuentes": ["INE Tempus3", "IECA/BADEA (paro + afiliación SS)", "SEPE datos abiertos"],
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
+        "frescura": frescura,
     }
     write("meta.json", meta)
     print(f"\n== Completado. Fallos: {errors} ==")
