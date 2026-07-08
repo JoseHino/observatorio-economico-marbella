@@ -163,6 +163,7 @@ function CARD_ULT(){
   const empY=D.empresas&&D.empresas.total?lastY(D.empresas.total):null;
   const renY=D.renta&&D.renta.neta_persona?lastY(D.renta.neta_persona):null;
   const demY=D.demografia&&D.demografia.poblacion?lastY(D.demografia.poblacion):null;
+  const demYatlas=D.demografia&&D.demografia.pct_espanola?lastY(D.demografia.pct_espanola):null;
   const M=(t)=>['mes',t], TR=(t)=>['trim',t], AN=(y)=>['anual',y];
   return {
     c_paro:M(pmT), c_paro_sec:M(pmT), c_paro_edad:M(pmT),
@@ -173,7 +174,7 @@ function CARD_ULT(){
     c_emp:AN(empY), c_emp_sec:AN(empY),
     c_soc:M(socT), c_soc_saldo:M(socT),
     c_renta:AN(renY), c_renta_uc:AN(renY), c_pobreza:AN(renY),
-    c_pob:AN(demY), c_nac:AN(demY), c_edad:AN(demY),
+    c_pob:AN(demY), c_nac:AN(demYatlas), c_edad:AN(demYatlas),
     c_compraventa:M(cvT), c_ipv:TR(ipvT), c_ipv_var:TR(ipvT),
   };
 }
@@ -466,7 +467,10 @@ function buildRenta(){
 function buildDemografia(){
   const el=document.getElementById('demografia');const d=DATA.demografia||{};
   const esp=last(d.pct_espanola),em=last(d.edad_media),m18=last(d.pct_menor18),m65=last(d.pct_mayor65),th=last(d.tamano_hogar),up=last(d.pct_unipersonales);
+  const pobL=last(d.poblacion), pobPrev=d.poblacion&&d.poblacion.length>1?d.poblacion[d.poblacion.length-2]:null;
   const k=[];
+  if(pobL){const dv=pobPrev?pct(pobL.v,pobPrev.v):null;const[dt,dc]=deltaTxt(dv);
+    k.push(kpi(fmt(pobL.v),'Población · '+pobL.y,dt,dc));}
   if(esp)k.push(kpi(fmt(100-esp.v,1)+' %','Población extranjera · '+esp.y,'',''));
   if(em)k.push(kpi(fmt(em.v,1),'Edad media (años) · '+em.y,'',''));
   if(m18)k.push(kpi(fmt(m18.v,1)+' %','Menores de 18 · '+m18.y,'',''));
@@ -474,10 +478,10 @@ function buildDemografia(){
   if(th)k.push(kpi(fmt(th.v,1),'Tamaño medio hogar · '+th.y,'',''));
   if(up)k.push(kpi(fmt(up.v,1)+' %','Hogares unipersonales · '+up.y,'',''));
   el.innerHTML='<div class="h2">Demografía</div>'+
-   '<div class="pdesc">Población, estructura de edad, peso de la población extranjera y composición de los hogares (INE · Atlas).</div>'+
+   '<div class="pdesc">Población oficial del Padrón municipal (a 1 de enero) y estructura de edad, nacionalidad y hogares del Atlas del INE.</div>'+
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
-    card('c_pob','Evolución de la población',geoTag('Marbella')+'Población empadronada en Marbella'+nota('Anual. Padrón a 1 de enero (vía Atlas del INE, ~2 años de desfase).'),'stat',ineTbl(30832,'Atlas demografía (tabla 30832)'),true)+
+    card('c_pob','Evolución de la población',geoTag('Marbella')+'Población empadronada en Marbella'+nota('Anual. Cifras oficiales del Padrón municipal a 1 de enero (INE · DPOP, ~6 meses de desfase).'),'stat',ineTbl(2882,'Padrón municipal · Málaga (tabla 2882)'),true)+
     card('c_nac','Composición por nacionalidad',geoTag('Marbella')+'% de población española y extranjera'+nota('Anual. Padrón a 1 de enero (vía Atlas del INE).'),'stat',ineTbl(30832,'Atlas demografía (tabla 30832)'))+
     card('c_edad','Estructura de edad',geoTag('Marbella')+'% menores de 18 y de 65 y más años'+nota('Anual. Padrón a 1 de enero (vía Atlas del INE).'),'stat',ineTbl(30832,'Atlas demografía (tabla 30832)'))+
    '</div>';

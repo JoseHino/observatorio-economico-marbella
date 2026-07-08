@@ -181,13 +181,22 @@ def renta():
 
 # ---------------------------------------------------------------- DEMOGRAFÍA
 def demografia():
-    step("Demografía · INE Atlas (tabla 30832, Marbella)")
+    step("Demografía · INE (población: Padrón DPOP; estructura: Atlas 30832)")
+    # Población: Cifras Oficiales del Padrón (op. DPOP, tabla 2882) — a 1 de enero,
+    # se publica a finales de año (~6 meses de desfase) en vez de los ~2 años del Atlas.
+    poblacion = ine_anual("DPOP13669")          # Marbella. Total habitantes.
+    pob_h     = ine_anual("DPOP13670")          # Hombres
+    pob_m     = ine_anual("DPOP13671")          # Mujeres
+    # Estructura demográfica (edad, nacionalidad, hogares): solo el Atlas la da a nivel
+    # municipal, y es anual con ~2 años de desfase (dato fiscal/censal definitivo).
     try:
         s = tabla_series("30832", "19:2822")
     except Exception as e:
-        print(f"    ! demografía 30832: {e}"); write("demografia.json", {}); return
+        print(f"    ! demografía Atlas 30832: {e}"); s = []
     data = {
-        "poblacion":        serie_anual_from(s, "marbella. población."),
+        "poblacion":        poblacion,
+        "poblacion_h":      pob_h,
+        "poblacion_m":      pob_m,
         "edad_media":       serie_anual_from(s, "edad media"),
         "pct_menor18":      serie_anual_from(s, "menor de 18"),
         "pct_mayor65":      serie_anual_from(s, "65 y más"),
