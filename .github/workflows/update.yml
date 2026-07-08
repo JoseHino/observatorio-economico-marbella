@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Instalar dependencias
+        run: pip install xlrd==2.0.1
+
       - name: Descargar datos oficiales (INE · IECA · SEPE)
         run: python fetch_data.py
 

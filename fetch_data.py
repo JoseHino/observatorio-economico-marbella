@@ -294,6 +294,116 @@ def _dedup_sorted(rows):
         seen.add(r["t"]); out.append(r)
     return out
 
+# ---- Parche mensual del SEPE (fichero .xls por provincia) ----------------------
+# El CSV anual (Paro/Contratos_por_municipios_AAAA_csv.csv) se refunde con ~1 mes de
+# retraso, pero el SEPE publica cada mes primero un .xls por provincia
+# (MUNI_MALAGA_MMAA.xls) que SÍ trae el último mes. Aquí se rellenan los meses que
+# aún no están en el CSV anual leyendo ese .xls (solo el detalle de Marbella).
+_MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+             "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+_XLS_CACHE = {}
+
+def _sepe_muni_xls(year, month):
+    """Devuelve el workbook xlrd del fichero mensual de Málaga, o None."""
+    key = (year, month)
+    if key in _XLS_CACHE:
+        return _XLS_CACHE[key]
+    _XLS_CACHE[key] = None
+    try:
+        import xlrd
+    except ImportError:
+        print("    · xlrd no disponible: se omite el parche mensual del SEPE")
+        return None
+    page = ("https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/"
+            f"datos-estadisticos/municipios/{year}/{_MESES_ES[month-1]}.html")
+    import re
+    fn = f"MUNI_MALAGA_{month:02d}{year % 100:02d}.xls"
+    try:
+        html = _get(page, timeout=90).decode("utf-8", "ignore")
+        m = re.search(r'href="([^"]*%s)"' % re.escape(fn), html)
+        if not m:
+            return None
+        href = m.group(1)
+        url = href if href.startswith("http") else "https://www.sepe.es" + href
+        wb = xlrd.open_workbook(file_contents=_get(url, timeout=120))
+        _XLS_CACHE[key] = wb
+        return wb
+    except Exception as e:
+        print(f"    · {year}-{month:02d}: xls mensual no disponible ({e})")
+        return None
+
+def _xls_marbella_row(wb, sheet):
+    if wb is None or sheet not in wb.sheet_names():
+        return None
+    sh = wb.sheet_by_name(sheet)
+    for r in range(sh.nrows):
+        if str(sh.cell_value(r, 0)).split(".")[0].strip() == MUN:
+            return [sh.cell_value(r, c) for c in range(sh.ncols)]
+    return None
+
+def _xv(row, i):
+    """Valor entero de una celda del .xls (num o texto)."""
+    if row is None or i >= len(row):
+        return 0
+    v = row[i]
+    if isinstance(v, (int, float)):
+        return int(round(v))
+    return iv(str(v))
+
+def _months_after(t, upto_y, upto_m):
+    y, m = int(t[:4]), int(t[5:7])
+    out = []
+    while True:
+        m += 1
+        if m > 12:
+            m = 1; y += 1
+        if y > upto_y or (y == upto_y and m > upto_m):
+            break
+        out.append((y, m))
+    return out
+
+def _sepe_patch_meses(paro_mb, contr_mb):
+    """Añade a paro_mb / contr_mb los meses de Marbella que falten respecto a hoy,
+    leídos del .xls mensual del SEPE. Devuelve la lista de meses añadidos."""
+    today = datetime.date.today()
+    ult_paro = paro_mb[-1]["t"] if paro_mb else "2020-12"
+    ult_contr = contr_mb[-1]["t"] if contr_mb else "2020-12"
+    faltan = _months_after(min(ult_paro, ult_contr), today.year, today.month)
+    tiene_paro = {r["t"] for r in paro_mb}
+    tiene_contr = {r["t"] for r in contr_mb}
+    add = []
+    for y, mth in faltan:
+        t = f"{y:04d}-{mth:02d}"
+        wb = _sepe_muni_xls(y, mth)
+        if wb is None:
+            continue
+        p = _xls_marbella_row(wb, "PARO")      # 0cod 1nom 2tot 3H<25 4H25-44 5H>=45 6M<25 7M25-44 8M>=45 9agri 10ind 11constr 12serv 13sin
+        if p and t not in tiene_paro:
+            paro_mb.append({"t": t, "total": _xv(p, 2),
+                "hombres": _xv(p, 3) + _xv(p, 4) + _xv(p, 5),
+                "mujeres": _xv(p, 6) + _xv(p, 7) + _xv(p, 8),
+                "edad": {"menor25": _xv(p, 3) + _xv(p, 6),
+                         "de25a44": _xv(p, 4) + _xv(p, 7),
+                         "mayor45": _xv(p, 5) + _xv(p, 8)},
+                "sectores": {"agricultura": _xv(p, 9), "industria": _xv(p, 10),
+                             "construccion": _xv(p, 11), "servicios": _xv(p, 12),
+                             "sin_empleo": _xv(p, 13)}})
+        c = _xls_marbella_row(wb, "CONTRATOS")  # 3H_indef 4H_temp 5H_conv 6M_indef 7M_temp 8M_conv 9agri 10ind 11constr 12serv
+        if c and t not in tiene_contr:
+            indef = _xv(c, 3) + _xv(c, 5) + _xv(c, 6) + _xv(c, 8)
+            temp = _xv(c, 4) + _xv(c, 7)
+            contr_mb.append({"t": t, "total": _xv(c, 2),
+                "indefinidos": indef, "temporales": temp,
+                "indef_h": _xv(c, 3) + _xv(c, 5), "temp_h": _xv(c, 4),
+                "indef_m": _xv(c, 6) + _xv(c, 8), "temp_m": _xv(c, 7),
+                "sectores": {"agricultura": _xv(c, 9), "industria": _xv(c, 10),
+                             "construccion": _xv(c, 11), "servicios": _xv(c, 12)}})
+        if p or c:
+            add.append(t)
+    if add:
+        print(f"    + parche .xls mensual del SEPE: {', '.join(add)}")
+    return add
+
 def sepe_laboral():
     """Descarga los CSV nacionales del SEPE (paro y contratos) y en una sola
     pasada extrae el detalle de Marbella y agrega España / Andalucía / Málaga
@@ -334,7 +444,6 @@ def sepe_laboral():
                 n += 1
         print(f"    · paro {y}: {n} meses de Marbella")
     paro_mb = _dedup_sorted(paro_mb)
-    write("paro_mensual.json", {"serie": paro_mb})
 
     # ----- CONTRATOS -----
     step("Contratos registrados mensual · SEPE (Marbella + comparativa territorial)")
@@ -369,6 +478,13 @@ def sepe_laboral():
                 n += 1
         print(f"    · contratos {y}: {n} meses de Marbella")
     contr_mb = _dedup_sorted(contr_mb)
+
+    # ----- PARCHE: meses recientes aún no refundidos en el CSV anual -----
+    # Lee el .xls mensual del SEPE (sale antes) para completar Marbella hasta hoy.
+    _sepe_patch_meses(paro_mb, contr_mb)
+    paro_mb = _dedup_sorted(paro_mb)
+    contr_mb = _dedup_sorted(contr_mb)
+    write("paro_mensual.json", {"serie": paro_mb})
     write("contratos_mensual.json", {"serie": contr_mb})
 
     # ----- COMPARATIVA TERRITORIAL -----
