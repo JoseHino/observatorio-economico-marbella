@@ -81,11 +81,28 @@ def ine_serie(cod, nult=400):
         print(f"    ! INE serie {cod}: {e}")
         return []
 
+def ine_periodo(anyo, fk, fecha):
+    """Devuelve (anyo, mes) del periodo de referencia del dato.
+
+    NO usar 'Fecha' en UTC: el INE la envía como medianoche de Madrid (UTC+1/+2),
+    que convertida a UTC cae en el último día del mes ANTERIOR. Eso etiquetaba
+    toda la serie mensual un mes por detrás (el dato de junio salía como mayo).
+    'FK_Periodo' es la fuente fiable: 1-12 = mes; 20-23 = trimestre 1T-4T, que se
+    etiqueta con su último mes (03/06/09/12), como espera el front.
+    """
+    if fk and 1 <= fk <= 12:
+        return int(anyo), int(fk)
+    if fk and 20 <= fk <= 23:
+        return int(anyo), (int(fk) - 19) * 3
+    # último recurso: desplazar 2 h para compensar el huso de Madrid
+    d = datetime.datetime.fromtimestamp(fecha/1000 + 7200, datetime.timezone.utc)
+    return d.year, d.month
+
 def ine_mensual(cod, nult=400):
     out = []
     for anyo, per, fecha, val in ine_serie(cod, nult):
-        d = datetime.datetime.fromtimestamp(fecha/1000, datetime.timezone.utc)
-        out.append({"t": f"{d.year:04d}-{d.month:02d}", "v": val})
+        y, m = ine_periodo(anyo, per, fecha)
+        out.append({"t": f"{y:04d}-{m:02d}", "v": val})
     out.sort(key=lambda x: x["t"])
     return out
 
@@ -243,12 +260,44 @@ def vivienda():
     comp = {"general": "ETDP1696", "nueva": "ETDP1695", "segunda_mano": "ETDP1694"}
     ipv  = {"indice": "IPV766", "var_anual": "IPV939",
             "indice_nueva": "IPV765", "indice_segunda": "IPV764"}
+    # Hipotecas constituidas sobre viviendas (INE tabla 76317, base nueva, mensual)
+    hipo = {"numero": "HPT34587", "importe": "HPT34534"}   # provincia de Málaga
     data = {
         "compraventa": {k: ine_mensual(c) for k, c in comp.items()},
         "precio":      {k: ine_mensual(c) for k, c in ipv.items()},
-        "ambito": {"compraventa": "provincia de Málaga", "precio": "Andalucía"},
+        "hipotecas":   {k: ine_mensual(c) for k, c in hipo.items()},
+        "ambito": {"compraventa": "provincia de Málaga", "precio": "Andalucía",
+                   "hipotecas": "provincia de Málaga"},
     }
+    # importe medio por hipoteca (miles € -> €), alineado por mes
+    num = {p["t"]: p["v"] for p in data["hipotecas"]["numero"]}
+    imp = {p["t"]: p["v"] for p in data["hipotecas"]["importe"]}
+    data["hipotecas"]["importe_medio"] = [
+        {"t": t, "v": round(imp[t] * 1000.0 / num[t])}
+        for t in sorted(num) if num.get(t) and imp.get(t) is not None
+    ]
     write("vivienda.json", data)
+
+# ---------------------------------------------------------------- COYUNTURA (INE: IPC + comercio minorista)
+def coyuntura():
+    step("Coyuntura · INE (IPC Andalucía/España + Índice de Comercio Minorista Andalucía)")
+    # OJO: el INE rebasa el IPC y crea tabla nueva cada pocos años; los códigos
+    # antiguos quedan congelados. Estos salen de la tabla vigente 79182 (CCAA,
+    # ECOICOP ver.2) y 79181 (nacional). Si el IPC se congela, buscar la tabla de
+    # Id mayor en TABLAS_OPERACION/IPC y volver a extraer "Índice general".
+    data = {
+        "ipc": {
+            "indice":         ine_mensual("IPC293660"),   # Andalucía · índice general
+            "var_anual":      ine_mensual("IPC293659"),   # Andalucía · variación anual
+            "indice_es":      ine_mensual("IPC290751"),   # España · índice general
+            "var_anual_es":   ine_mensual("IPC290750"),   # España · variación anual
+        },
+        # Índice de Comercio al por Menor, cifra de negocio a precios constantes,
+        # Andalucía, general (tabla 75808) — pulso del consumo real
+        "icm": {"indice": ine_mensual("ICM4441"), "var_anual": ine_mensual("ICM4554")},
+        "ambito": {"ipc": "Andalucía y España", "icm": "Andalucía"},
+    }
+    write("coyuntura.json", data)
 
 # ---------------------------------------------------------------- SOCIEDADES MERCANTILES (INE SM, provincial)
 def sociedades():
@@ -627,6 +676,7 @@ def afiliacion():
 _FRESCURA_MAX = {
     "paro_mensual.json": 2, "contratos_mensual.json": 2, "comparativa_laboral.json": 3,
     "afiliacion.json": 4, "sociedades.json": 4, "turismo.json": 3, "vivienda.json": 7,
+    "coyuntura.json": 3,
     "paro_anual.json": 16, "empresas.json": 20, "renta.json": 32, "demografia.json": 32,
 }
 
@@ -685,7 +735,8 @@ def auditar_frescura():
 def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
-    for fn in (turismo, renta, demografia, empresas, vivienda, sociedades, paro_badea, afiliacion, sepe_laboral):
+    for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
+               paro_badea, afiliacion, sepe_laboral):
         try:
             fn()
         except Exception as e:
