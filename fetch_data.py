@@ -87,15 +87,22 @@ def ine_periodo(anyo, fk, fecha):
     NO usar 'Fecha' en UTC: el INE la envía como medianoche de Madrid (UTC+1/+2),
     que convertida a UTC cae en el último día del mes ANTERIOR. Eso etiquetaba
     toda la serie mensual un mes por detrás (el dato de junio salía como mayo).
-    'FK_Periodo' es la fuente fiable: 1-12 = mes; 20-23 = trimestre 1T-4T, que se
-    etiqueta con su último mes (03/06/09/12), como espera el front.
+    Compensando ese huso, 'Fecha' sí es fiable: marca el primer día del periodo.
+
+    Para las MENSUALES manda 'FK_Periodo' (1-12 = mes).
+
+    Para las TRIMESTRALES el trimestre se deduce de la fecha compensada y se
+    etiqueta con su último mes (03/06/09/12), como espera el front. NO se traduce
+    el número de 'FK_Periodo': el INE lo renumera. El IPV usa hoy 19-22 para
+    1T-4T —verificado: 2026 FK=19 trae Fecha 2026-01-01— y el código anterior
+    daba por hecho 20-23, con lo que TODA serie trimestral salía un trimestre por
+    delante: el dato del 4T de 2025 aparecía etiquetado como septiembre.
     """
     if fk and 1 <= fk <= 12:
         return int(anyo), int(fk)
-    if fk and 20 <= fk <= 23:
-        return int(anyo), (int(fk) - 19) * 3
-    # último recurso: desplazar 2 h para compensar el huso de Madrid
     d = datetime.datetime.fromtimestamp(fecha/1000 + 7200, datetime.timezone.utc)
+    if fk and fk > 12:
+        return d.year, ((d.month - 1) // 3 + 1) * 3
     return d.year, d.month
 
 def ine_mensual(cod, nult=400):
@@ -258,8 +265,15 @@ def empresas():
 def vivienda():
     step("Vivienda · INE (compraventa ETDP Málaga + precio IPV Andalucía)")
     comp = {"general": "ETDP1696", "nueva": "ETDP1695", "segunda_mano": "ETDP1694"}
-    ipv  = {"indice": "IPV766", "var_anual": "IPV939",
-            "indice_nueva": "IPV765", "indice_segunda": "IPV764"}
+    # OJO: el INE rebasa el IPV y crea tabla nueva, dejando la anterior congelada,
+    # igual que hace con el IPC. Los códigos IPV766/939/765/764 (tabla 76201) MURIERON
+    # tras el 4T de 2025 y tenían el precio de la vivienda parado once meses sin que
+    # nada fallara. Estos son los vigentes (tabla 80270, base nueva: el índice general
+    # de Andalucía pasa de 185,9 a 103,8 en el mismo trimestre, es un cambio de base,
+    # no una caída de precios). Si vuelve a congelarse, buscar la tabla de Id mayor en
+    # TABLAS_OPERACION/IPV y sacar allí los COD de Andalucía.
+    ipv  = {"indice": "IPV1623", "var_anual": "IPV1625",
+            "indice_nueva": "IPV1628", "indice_segunda": "IPV1633"}
     # Hipotecas constituidas sobre viviendas (INE tabla 76317, base nueva, mensual)
     hipo = {"numero": "HPT34587", "importe": "HPT34534"}   # provincia de Málaga
     data = {
@@ -363,6 +377,27 @@ _MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
              "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 _XLS_CACHE = {}
 
+def _repara_ole(datos):
+    """Corrige el marcador de orden de bytes del .xls mensual del SEPE.
+
+    El fichero que publica el SEPE es un documento OLE2 válido salvo por dos
+    bytes: en el desplazamiento 28 escribe ``FF FF`` donde el formato exige
+    ``FE FF`` (little-endian). xlrd es estricto y lo rechaza con
+    ``CompDocError: Expected "little-endian" marker``, de modo que el parche
+    mensual fallaba SIEMPRE y el observatorio se quedaba esperando a que el SEPE
+    refundiera el CSV anual, un mes más tarde. Corregidos esos dos bytes, el
+    libro abre y trae sus hojas PARO y CONTRATOS intactas.
+
+    Se toca solo la cabecera del contenedor, nunca los datos.
+    """
+    if len(datos) > 30 and datos[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" \
+            and datos[28:30] == b"\xff\xff":
+        arreglado = bytearray(datos)
+        arreglado[28:30] = b"\xfe\xff"
+        return bytes(arreglado)
+    return datos
+
+
 def _sepe_muni_xls(year, month):
     """Devuelve el workbook xlrd del fichero mensual de Málaga, o None."""
     key = (year, month)
@@ -385,7 +420,7 @@ def _sepe_muni_xls(year, month):
             return None
         href = m.group(1)
         url = href if href.startswith("http") else "https://www.sepe.es" + href
-        wb = xlrd.open_workbook(file_contents=_get(url, timeout=120))
+        wb = xlrd.open_workbook(file_contents=_repara_ole(_get(url, timeout=120)))
         _XLS_CACHE[key] = wb
         return wb
     except Exception as e:
@@ -680,24 +715,60 @@ _FRESCURA_MAX = {
     "paro_anual.json": 16, "empresas.json": 20, "renta.json": 32, "demografia.json": 32,
 }
 
+def _normaliza(v):
+    """'2026-06' se compara tal cual; un año suelto ordena tras sus meses."""
+    if v is None: return None
+    s = str(v)
+    return s + "-13" if len(s) == 4 and s.isdigit() else s
+
+
+def _series_del_fichero(obj):
+    """Devuelve {ruta: último periodo} para CADA serie del JSON, no para el fichero.
+
+    Auditar el fichero entero como una sola cosa dejaba pasar justo lo que este
+    vigilante existe para cazar: en vivienda.json conviven la compraventa mensual
+    —viva— y el precio de la vivienda —congelado once meses porque el INE renumeró
+    la tabla—. Al quedarse con el periodo MAYOR del fichero, la serie muerta era
+    invisible. Se mira serie a serie.
+    """
+    out = {}
+
+    def es_punto(x):
+        return isinstance(x, dict) and ("t" in x or "y" in x)
+
+    def anota(ruta, periodo):
+        periodo = _normaliza(periodo)
+        if not periodo:
+            return
+        clave = ruta or "(raíz)"
+        if clave not in out or periodo > out[clave]:
+            out[clave] = periodo
+
+    def walk(x, ruta):
+        if isinstance(x, list):
+            puntos = [p for p in x if es_punto(p)]
+            if puntos:
+                for p in puntos:
+                    anota(ruta, p.get("t") or p.get("y"))
+                return
+            for i, v in enumerate(x):
+                walk(v, f"{ruta}[{i}]" if ruta else f"[{i}]")
+        elif es_punto(x):
+            # paro_anual guarda listas de dicts de puntos: {total:{y,v}, hombres:{y,v}}
+            anota(ruta, x.get("t") or x.get("y"))
+        elif isinstance(x, dict):
+            for k, v in x.items():
+                walk(v, f"{ruta}.{k}" if ruta else k)
+    walk(obj, "")
+    return {k: (v[:4] if v.endswith("-13") else v[:7]) for k, v in out.items()}
+
+
 def _ultimo_periodo(obj):
     """Mayor periodo ('YYYY' o 'YYYY-MM') hallado recursivamente en un JSON."""
-    best = [None]
-    def upd(v):
-        if v is None: return
-        s = str(v)
-        if len(s) == 4 and s.isdigit(): s = s + "-13"   # un año ordena tras sus meses
-        if best[0] is None or s > best[0]: best[0] = s
-    def walk(x):
-        if isinstance(x, dict):
-            if "t" in x: upd(x["t"])
-            if isinstance(x.get("y"), (int, str)): upd(str(x["y"]))
-            for v in x.values(): walk(v)
-        elif isinstance(x, list):
-            for v in x: walk(v)
-    walk(obj)
-    s = best[0]
-    return s[:7] if s and not s.endswith("-13") else (s[:4] if s else None)
+    series = _series_del_fichero(obj)
+    if not series:
+        return None
+    return max(series.values(), key=lambda s: _normaliza(s))
 
 def _meses_desde(periodo, hoy):
     if not periodo: return 999
@@ -721,11 +792,29 @@ def auditar_frescura():
         desf = _meses_desde(ult, hoy)
         tope = _FRESCURA_MAX.get(name, 6)
         obsoleto = desf > tope
+
+        # Y ahora serie a serie: una serie muerta dentro de un fichero por lo demás
+        # fresco es el caso que hay que cazar, y el que el fichero entero disimula.
+        rezagadas = {}
+        for ruta, periodo in sorted(_series_del_fichero(obj).items()):
+            atraso = _meses_desde(periodo, hoy)
+            # Se compara con la serie más fresca del propio fichero: si una va muy
+            # por detrás de sus hermanas, es que su código de origen ha muerto.
+            if atraso > tope and atraso - desf >= 3:
+                rezagadas[ruta] = {"ultimo": periodo, "desfase_meses": atraso}
+
         rep[name] = {"ultimo": ult, "desfase_meses": desf, "obsoleto": obsoleto}
-        flag = "  ⚠ OBSOLETO" if obsoleto else ""
+        if rezagadas:
+            rep[name]["series_rezagadas"] = rezagadas
+        flag = "  ⚠ OBSOLETO" if obsoleto else ("  ⚠ CON SERIES REZAGADAS" if rezagadas else "")
         print(f"    · {name:28s} último={ult} ({desf} meses){flag}")
+        for ruta, info in rezagadas.items():
+            print(f"        ↳ {ruta}: último {info['ultimo']} ({info['desfase_meses']} meses)")
         if obsoleto:
             alertas.append(f"{name} (último {ult}, {desf} meses)")
+        for ruta, info in rezagadas.items():
+            alertas.append(f"{name} · {ruta} (último {info['ultimo']}, "
+                           f"{info['desfase_meses']} meses)")
     if alertas:
         print("    !! INDICADORES POSIBLEMENTE OBSOLETOS (revisar códigos de fuente):")
         for a in alertas: print(f"       - {a}")
