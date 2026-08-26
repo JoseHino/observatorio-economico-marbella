@@ -1,9 +1,12 @@
 name: Actualizar datos del Observatorio
 
-# Se ejecuta solo cada día (y también se puede lanzar a mano).
+# Se ejecuta solo cada 6 horas (y también se puede lanzar a mano).
 on:
   schedule:
-    - cron: '0 5 * * *'        # 05:00 UTC (~07:00 España) todos los días
+    # 07:00, 13:00, 19:00 y 01:00 hora de España. El INE publica a las 09:00
+    # CET, así que la pasada de las 13:00 recoge el dato el mismo día en que
+    # sale, sin esperar a la mañana siguiente.
+    - cron: '0 5,11,17,23 * * *'
   workflow_dispatch:            # botón "Run workflow" en la pestaña Actions
 
 permissions:
@@ -24,7 +27,12 @@ jobs:
       - name: Instalar dependencias
         run: pip install xlrd==2.0.1
 
+      # continue-on-error: si una serie se ha quedado congelada, fetch_data.py
+      # sale con código 2. Los datos son buenos y deben publicarse igualmente,
+      # así que el fallo se pospone hasta después del commit.
       - name: Descargar datos oficiales (INE · IECA · SEPE)
+        id: recolectar
+        continue-on-error: true
         run: python fetch_data.py
 
       - name: Guardar los datos si han cambiado
@@ -38,3 +46,14 @@ jobs:
             git commit -m "Datos actualizados ($(date -u +%Y-%m-%d))"
             git push
           fi
+
+      # Ya con los datos publicados, se deja la ejecución en rojo para que
+      # GitHub mande el aviso: alguna serie lleva meses sin moverse y su
+      # código de origen probablemente haya muerto (el INE rebasa tablas y
+      # renumera códigos sin previo aviso). El detalle está en el log, en
+      # "Auditoría de frescura".
+      - name: Avisar si hay series congeladas
+        if: steps.recolectar.outcome != 'success'
+        run: |
+          echo "::error::La recolección terminó con avisos: revisa la Auditoría de frescura en el log."
+          exit 1

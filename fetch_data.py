@@ -818,7 +818,7 @@ def auditar_frescura():
     if alertas:
         print("    !! INDICADORES POSIBLEMENTE OBSOLETOS (revisar códigos de fuente):")
         for a in alertas: print(f"       - {a}")
-    return rep
+    return rep, alertas
 
 # ---------------------------------------------------------------- MAIN
 def main():
@@ -832,9 +832,10 @@ def main():
             errors += 1
             print(f"    !! fallo en {fn.__name__}: {e}")
     try:
-        frescura = auditar_frescura()
+        frescura, alertas = auditar_frescura()
     except Exception as e:
-        frescura = {}; print(f"    !! fallo en auditar_frescura: {e}")
+        frescura, alertas = {}, []
+        print(f"    !! fallo en auditar_frescura: {e}")
     meta = {
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "fuentes": ["INE Tempus3", "IECA/BADEA (paro + afiliación SS)", "SEPE datos abiertos"],
@@ -844,7 +845,19 @@ def main():
     }
     write("meta.json", meta)
     print(f"\n== Completado. Fallos: {errors} ==")
-    return 0 if errors == 0 else 1
+    if errors:
+        return 1
+    if alertas:
+        # Los datos ya están escritos y se publican igualmente: lo que se ha
+        # quedado atrás es una serie suelta, no la recolección. Pero se sale en
+        # rojo a propósito, porque un código de origen muerto NO se manifiesta
+        # de ninguna otra forma -el panel sigue pintando la última cifra buena-
+        # y así fue como el precio de la vivienda pasó once meses congelado.
+        # El Action publica los datos y DESPUÉS marca la ejecución como fallida,
+        # para que GitHub avise por correo.
+        print("== Series congeladas: se marca la ejecución en rojo para avisar ==")
+        return 2
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
