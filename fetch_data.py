@@ -708,12 +708,51 @@ def afiliacion():
 # Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
 # obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
 # sin que nadie lo descubra por casualidad. Los anuales llevan una tolerancia alta.
+#
+# El tope tiene que caber el CICLO ENTERO de publicación de su fuente, no el desfase
+# del día que se escribió. Si se ajusta a lo que hay hoy, el vigilante se convierte en
+# un despertador: pita todos los días de los últimos meses de cada ciclo, sin que pase
+# nada, y a base de avisos falsos deja de mirarse. Entonces, el día que algo se rompe
+# de verdad, el aviso ya no lo lee nadie.
+#
+# Atlas de Distribución de Renta del INE (tablas 30824, 30831 y 30832): publica el año
+# N alrededor de DICIEMBRE DE N+2. El ejercicio 2023 salió en diciembre de 2025 y sigue
+# siendo el último publicado —comprobado contra la tabla 30824, que para Marbella da
+# 13.384 € de renta neta por persona en 2023 y nada posterior—; el 2024 no llegará
+# hasta diciembre de 2026. El desfase de estas series, por tanto, CRECE hasta unos 36
+# meses justo antes de cada entrega y vuelve a caer a 24 el día que sale. Con el tope
+# en 32 la ejecución se ponía en rojo cada seis horas durante el último tercio del
+# ciclo aunque el recolector funcionase perfectamente.
+_ATLAS_INE = 40   # 36 del ciclo + margen por si el INE retrasa la entrega
+
 _FRESCURA_MAX = {
     "paro_mensual.json": 2, "contratos_mensual.json": 2, "comparativa_laboral.json": 3,
     "afiliacion.json": 4, "sociedades.json": 4, "turismo.json": 3, "vivienda.json": 7,
     "coyuntura.json": 3,
-    "paro_anual.json": 16, "empresas.json": 20, "renta.json": 32, "demografia.json": 32,
+    "paro_anual.json": 16, "empresas.json": 20,
+    "renta.json": _ATLAS_INE, "demografia.json": 14,
 }
+
+# Excepciones POR SERIE dentro de un fichero. Hacen falta cuando en el mismo JSON
+# conviven fuentes con calendarios distintos: demografia.json mezcla el Padrón —anual
+# con ~9 meses de desfase— con la estructura por edad y hogares del Atlas, que va dos
+# años por detrás. Un tope único obliga a elegir entre tolerar el Atlas (y no enterarse
+# si el Padrón se congela) o vigilar el Padrón (y pitar por el Atlas todos los días).
+_FRESCURA_SERIE = {
+    "demografia.json": {
+        "edad_media": _ATLAS_INE, "pct_menor18": _ATLAS_INE, "pct_mayor65": _ATLAS_INE,
+        "pct_espanola": _ATLAS_INE, "tamano_hogar": _ATLAS_INE,
+        "pct_unipersonales": _ATLAS_INE,
+    },
+}
+
+
+def _tope_de(name, ruta=None):
+    """Meses tolerados para un fichero, o para una serie concreta dentro de él."""
+    base = _FRESCURA_MAX.get(name, 6)
+    if ruta is None:
+        return base
+    return _FRESCURA_SERIE.get(name, {}).get(ruta, base)
 
 def _normaliza(v):
     """'2026-06' se compara tal cual; un año suelto ordena tras sus meses."""
@@ -790,7 +829,7 @@ def auditar_frescura():
             continue
         ult = _ultimo_periodo(obj)
         desf = _meses_desde(ult, hoy)
-        tope = _FRESCURA_MAX.get(name, 6)
+        tope = _tope_de(name)
         obsoleto = desf > tope
 
         # Y ahora serie a serie: una serie muerta dentro de un fichero por lo demás
@@ -799,8 +838,10 @@ def auditar_frescura():
         for ruta, periodo in sorted(_series_del_fichero(obj).items()):
             atraso = _meses_desde(periodo, hoy)
             # Se compara con la serie más fresca del propio fichero: si una va muy
-            # por detrás de sus hermanas, es que su código de origen ha muerto.
-            if atraso > tope and atraso - desf >= 3:
+            # por detrás de sus hermanas, es que su código de origen ha muerto. El
+            # tope es el de la serie, que puede no ser el del fichero cuando dentro
+            # conviven fuentes con calendarios distintos.
+            if atraso > _tope_de(name, ruta) and atraso - desf >= 3:
                 rezagadas[ruta] = {"ultimo": periodo, "desfase_meses": atraso}
 
         rep[name] = {"ultimo": ult, "desfase_meses": desf, "obsoleto": obsoleto}
