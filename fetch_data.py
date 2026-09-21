@@ -46,11 +46,78 @@ def _get(url, timeout=120, retries=3, backoff=2.0):
 def get_json(url):
     return json.loads(_get(url).decode("utf-8"))
 
+# ---------------------------------------------------------------- ESCRITURA SEGURA
+# Las fuentes se caen. El SEPE devolvió 503 en TODO su sitio durante dos ventanas de
+# varios días (12-13 y 19-20 de septiembre de 2026) y, tal como estaba escrito esto,
+# una caída pasajera de la fuente BORRABA el indicador: cada descarga atrapa su error
+# y sigue, así que al final se escribía {"serie":[]} —12 bytes— encima de un fichero
+# bueno, el Action lo commiteaba y el panel se quedaba en blanco hasta la siguiente
+# pasada con suerte (la del 19 dejó el bloque laboral vacío 37 horas). Encima el
+# vigilante de frescura leía "último = None" y marcaba el indicador como obsoleto, que
+# es el aviso reservado a los códigos de origen MUERTOS: correos rojos de fallo por
+# una avería ajena y pasajera.
+#
+# Regla ahora: un dato publicado no se sustituye NUNCA por nada. Si la fuente no
+# contesta, se conserva lo último bueno y se dice en el log.
+_SIN_GUARDIA = {"meta.json"}   # meta no tiene periodos: se reescribe siempre
+CONSERVADOS = []               # ficheros que esta pasada NO ha podido refrescar
+
+def _leer(name):
+    """El JSON ya publicado en data/, o None si no hay o no se puede leer."""
+    try:
+        return json.load(io.open(os.path.join(OUT, name), encoding="utf-8"))
+    except Exception:
+        return None
+
+def _sin_datos(obj):
+    """True si el objeto no contiene ni un solo punto con periodo."""
+    try:
+        return _ultimo_periodo(obj) is None
+    except Exception:
+        return not obj
+
 def write(name, obj):
     path = os.path.join(OUT, name)
+    if name not in _SIN_GUARDIA and _sin_datos(obj):
+        prev = _leer(name)
+        if prev is not None and not _sin_datos(prev):
+            print(f"  ⟲ {name}: la fuente no ha devuelto nada; se CONSERVA lo publicado")
+            if name not in CONSERVADOS:
+                CONSERVADOS.append(name)
+            return
     with io.open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, separators=(",", ":"))
     print(f"  ✓ {name}  ({os.path.getsize(path)//1024 or 1} KB)")
+
+def write_serie(name, serie, clave="serie"):
+    """Escribe una serie temporal FUNDIÉNDOLA con la ya publicada.
+
+    Lo descargado manda (el SEPE revisa cifras de meses anteriores), pero los meses
+    que la descarga no ha traído se conservan. Así una caída PARCIAL de la fuente
+    —que un año responda y otro no— tampoco amputa el histórico.
+    """
+    prev = (_leer(name) or {}).get(clave) or []
+    fus = {r["t"]: r for r in prev if isinstance(r, dict) and r.get("t")}
+    bajados = 0
+    for r in serie:
+        if isinstance(r, dict) and r.get("t"):
+            fus[r["t"]] = r
+            bajados += 1
+    # Que la descarga traiga MENOS periodos que los publicados es lo normal: el CSV
+    # anual del SEPE cubre tres años y el último mes entra por el parche .xls, que no
+    # vuelve a bajar lo que ya está. Solo hay avería cuando no viene NADA.
+    if not bajados and prev:
+        print(f"    ⟲ {name}: la fuente no ha devuelto ningún periodo; "
+              f"se conservan los {len(prev)} publicados")
+        if name not in CONSERVADOS:
+            CONSERVADOS.append(name)
+    write(name, {clave: [fus[t] for t in sorted(fus)]})
+
+def _ultimo_mes_publicado(name, clave="serie"):
+    """Último periodo de la serie ya publicada en data/, o None."""
+    s = (_leer(name) or {}).get(clave) or []
+    ts = [r["t"] for r in s if isinstance(r, dict) and r.get("t")]
+    return max(ts) if ts else None
 
 def step(title):
     print(f"\n▶ {title}")
@@ -376,6 +443,8 @@ def _dedup_sorted(rows):
 _MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
              "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 _XLS_CACHE = {}
+_XLS_VENTANA = 6          # meses hacia atrás como mucho: más es histórico ya publicado
+_XLS_FALLOS_SEGUIDOS = 3  # 3 meses seguidos sin respuesta = la fuente está caída
 
 def _repara_ole(datos):
     """Corrige el marcador de orden de bytes del .xls mensual del SEPE.
@@ -461,17 +530,33 @@ def _sepe_patch_meses(paro_mb, contr_mb):
     """Añade a paro_mb / contr_mb los meses de Marbella que falten respecto a hoy,
     leídos del .xls mensual del SEPE. Devuelve la lista de meses añadidos."""
     today = datetime.date.today()
-    ult_paro = paro_mb[-1]["t"] if paro_mb else "2020-12"
-    ult_contr = contr_mb[-1]["t"] if contr_mb else "2020-12"
+    # El punto de partida es el último mes que YA está publicado, no solo el del CSV
+    # recién bajado: si el CSV anual no responde, paro_mb llega vacío y el parche se
+    # ponía a pedir uno por uno TODOS los meses desde 2021 (66 ficheros × 2 peticiones
+    # × 3 reintentos) contra una web que ya estaba dando 503. Trece minutos de Action
+    # martilleando al SEPE para no traer nada.
+    ult_paro = max(filter(None, [paro_mb[-1]["t"] if paro_mb else None,
+                                 _ultimo_mes_publicado("paro_mensual.json")]),
+                   default="2020-12")
+    ult_contr = max(filter(None, [contr_mb[-1]["t"] if contr_mb else None,
+                                  _ultimo_mes_publicado("contratos_mensual.json")]),
+                    default="2020-12")
     faltan = _months_after(min(ult_paro, ult_contr), today.year, today.month)
+    faltan = faltan[-_XLS_VENTANA:]      # el CSV anual se refunde con ~1 mes de retraso
     tiene_paro = {r["t"] for r in paro_mb}
     tiene_contr = {r["t"] for r in contr_mb}
-    add = []
+    add, fallos = [], 0
     for y, mth in faltan:
         t = f"{y:04d}-{mth:02d}"
         wb = _sepe_muni_xls(y, mth)
         if wb is None:
+            fallos += 1
+            if fallos >= _XLS_FALLOS_SEGUIDOS:
+                print("    · el SEPE no responde: se abandona el parche mensual "
+                      "(los datos publicados se conservan)")
+                break
             continue
+        fallos = 0
         p = _xls_marbella_row(wb, "PARO")      # 0cod 1nom 2tot 3H<25 4H25-44 5H>=45 6M<25 7M25-44 8M>=45 9agri 10ind 11constr 12serv 13sin
         if p and t not in tiene_paro:
             paro_mb.append({"t": t, "total": _xv(p, 2),
@@ -579,8 +664,8 @@ def sepe_laboral():
     _sepe_patch_meses(paro_mb, contr_mb)
     paro_mb = _dedup_sorted(paro_mb)
     contr_mb = _dedup_sorted(contr_mb)
-    write("paro_mensual.json", {"serie": paro_mb})
-    write("contratos_mensual.json", {"serie": contr_mb})
+    write_serie("paro_mensual.json", paro_mb)
+    write_serie("contratos_mensual.json", contr_mb)
 
     # ----- COMPARATIVA TERRITORIAL -----
     step("Comparativa territorial · agregados SEPE (España/Andalucía/Málaga/Marbella)")
@@ -605,7 +690,7 @@ def sepe_laboral():
                 "espana":    tasa_temp(ac["esp"][0], ac["esp"][2]),
             }
         comp.append(row)
-    write("comparativa_laboral.json", {"serie": comp})
+    write_serie("comparativa_laboral.json", comp)
 
 # ------------------------------------- AFILIACIÓN SEG. SOCIAL (IECA/BADEA b3_291)
 # "Afiliados a la Seguridad Social en alta laboral que trabajan en Andalucía".
@@ -883,8 +968,15 @@ def main():
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
         "frescura": frescura,
+        # Fuentes que no han contestado en esta pasada: el dato que se ve es el
+        # último bueno, no uno nuevo. Se informa, pero NO se marca la ejecución en
+        # rojo: una caída pasajera del SEPE no es un indicador muerto.
+        "conservados": list(CONSERVADOS),
     }
     write("meta.json", meta)
+    if CONSERVADOS:
+        print("\n== Fuentes caídas en esta pasada (se conserva el último dato bueno): "
+              + ", ".join(CONSERVADOS) + " ==")
     print(f"\n== Completado. Fallos: {errors} ==")
     if errors:
         return 1
