@@ -869,7 +869,18 @@ _FRESCURA_MAX = {
 # con ~9 meses de desfase— con la estructura por edad y hogares del Atlas, que va dos
 # años por detrás. Un tope único obliga a elegir entre tolerar el Atlas (y no enterarse
 # si el Padrón se congela) o vigilar el Padrón (y pitar por el Atlas todos los días).
+# Viviendas turísticas (INE, op. VTE): el INE la publica con MUCHO más retraso que
+# la encuesta hotelera -en septiembre de 2026 el último dato es mayo-, y las tres
+# series conviven en turismo.json con la EOH, que va a un mes. Sin esta excepción,
+# cada vez que entra un mes nuevo de hoteles las VUT quedan 3 meses por detrás de
+# sus hermanas y el vigilante las declara muertas sin estarlo: pasó el 22-09-2026,
+# al recogerse agosto. El tope propio se mide contra el calendario REAL de la fuente.
+_VUT_INE = 7      # ~4 meses de desfase habitual + margen
+
 _FRESCURA_SERIE = {
+    "turismo.json": {
+        "vut.viviendas": _VUT_INE, "vut.plazas": _VUT_INE, "vut.pct_viviendas": _VUT_INE,
+    },
     "demografia.json": {
         "edad_media": _ATLAS_INE, "pct_menor18": _ATLAS_INE, "pct_mayor65": _ATLAS_INE,
         "pct_espanola": _ATLAS_INE, "tamano_hogar": _ATLAS_INE,
