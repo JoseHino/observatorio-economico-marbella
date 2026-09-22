@@ -398,29 +398,52 @@ def sociedades():
     data["saldo_neto"] = [{"t": t, "v": cre[t] - dis.get(t, 0)} for t in sorted(cre)]
     write("sociedades.json", data)
 
-# ---------------------------------------------------------------- PARO ANUAL (BADEA)
-def paro_badea():
-    step("Paro registrado · IECA/BADEA (media anual municipal)")
-    B = ("https://www.juntadeandalucia.es/institutodeestadisticaycartografia/"
-         "intranet/admin/rest/v1.0/consulta/37016?D_TERRITORIO_0=" + BADEA_MARBELLA)
-    try:
-        j = get_json(B)
-    except Exception as e:
-        print(f"    ! {e}"); write("paro_anual.json", {}); return
-    data = j.get("data", [])
-    def grab(sexo):
-        for row in data:
-            des = [c.get("des") for c in row if isinstance(c, dict)]
-            if sexo in des and "TOTAL" in des and any((d or "").startswith("Parados") for d in des):
-                m = next((c for c in row if c.get("val") is not None), None)
-                yr = next((c.get("des") for c in row if (c.get("des") or "").isdigit()), "")
-                if m: return {"y": yr, "v": round(float(m["val"]))}
-        return None
-    write("paro_anual.json", {
-        "total":   grab("Ambos sexos"),
-        "hombres": grab("Hombres"),
-        "mujeres": grab("Mujeres"),
-    })
+# ------------------------------------------------- PARO ANUAL (media de los meses del SEPE)
+def paro_anual():
+    """Media anual del paro registrado, calculada con los meses que ya trae el SEPE.
+
+    Antes se pedía a IECA/BADEA. El 21-09-2026 la Junta dejó de aceptar tráfico de
+    fuera de Europa y los runners de GitHub están en Azure East US (Virginia): la
+    conexión ni siquiera llega a abrirse -timeout en el TCP, no un 403-, así que no
+    hay cabecera ni ruta que lo arregle. Como BADEA publicaba exactamente la media
+    de los doce meses que el SEPE ya nos da, se calcula aquí y se deja de depender
+    de una fuente inalcanzable. Comprobado contra el último valor que llegó a
+    publicar BADEA (2025: total 7294, hombres 2799, mujeres 4496): coincide.
+
+    Necesita paro_mensual.json ya escrito, así que en main() va DESPUÉS de sepe_laboral().
+    """
+    step("Paro registrado · media anual (calculada con los meses del SEPE)")
+    serie = (_leer("paro_mensual.json") or {}).get("serie") or []
+    if not serie:
+        print("    ! no hay paro mensual del que sacar la media")
+        write("paro_anual.json", {})
+        return
+
+    anios = {}
+    for p in serie:
+        t = str(p.get("t", ""))
+        if len(t) == 7 and t[:4].isdigit():
+            anios.setdefault(t[:4], []).append(p)
+
+    completos = sorted(a for a, ms in anios.items() if len(ms) == 12)
+    if not completos:
+        print("    ! aún no hay ningún año completo (12 meses) en la serie mensual")
+        write("paro_anual.json", {})
+        return
+
+    ultimo = completos[-1]
+    meses = anios[ultimo]
+
+    def media(clave):
+        vals = [m[clave] for m in meses if isinstance(m.get(clave), (int, float))]
+        if len(vals) != 12:
+            return None
+        return {"y": ultimo, "v": round(sum(vals) / 12)}
+
+    datos = {k: media(k) for k in ("total", "hombres", "mujeres")}
+    hecho = datos.get("total")
+    print(f"    · {ultimo}: media de 12 meses · total = {hecho['v'] if hecho else '?'}")
+    write("paro_anual.json", datos)
 
 # ---------------------------------------------------------------- SEPE (paro+contratos mensual + comparativa)
 def _sepe_csv(url):
@@ -761,6 +784,29 @@ def _afi_periodo(pid, t):
     return t, out, (mb_seen and out["andalucia"]["total"] > 0)
 
 def afiliacion():
+    """Envoltorio: una fuente inalcanzable NO debe tumbar la recolección.
+
+    Desde el 21-09-2026 la Junta descarta el tráfico que no viene de Europa y los
+    runners de GitHub corren en Azure East US, así que estas llamadas mueren por
+    timeout. Antes la excepción subía hasta main(), contaba como error y dejaba la
+    pasada en rojo cada seis horas, pese a que los datos se publicaban igual y BADEA
+    no tenía ningún mes nuevo que ofrecer.
+
+    Ahora se hace lo mismo que con cualquier otra caída de fuente: conservar el
+    último dato bueno y seguir. El aviso no se pierde, solo se aplaza a quien
+    corresponde: si el bloqueo dura y la serie se queda de verdad atrás, el vigilante
+    de frescura la marcará como obsoleta al pasar de 4 meses (_FRESCURA_MAX) y
+    entonces sí saldrá en rojo.
+    """
+    try:
+        _afiliacion_badea()
+    except Exception as e:
+        print(f"    ! {e}")
+        print("    ⟲ afiliacion.json: la fuente no ha contestado; se CONSERVA lo publicado")
+        write("afiliacion.json", {})
+
+
+def _afiliacion_badea():
     step("Afiliación a la Seguridad Social · IECA/BADEA (b3_291, municipal por régimen)")
     periodos = _afi_periodos()
     if not periodos:
@@ -950,8 +996,9 @@ def auditar_frescura():
 def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
+    # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
     for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
-               paro_badea, afiliacion, sepe_laboral):
+               afiliacion, sepe_laboral, paro_anual):
         try:
             fn()
         except Exception as e:
@@ -964,7 +1011,7 @@ def main():
         print(f"    !! fallo en auditar_frescura: {e}")
     meta = {
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "fuentes": ["INE Tempus3", "IECA/BADEA (paro + afiliación SS)", "SEPE datos abiertos"],
+        "fuentes": ["INE Tempus3", "IECA/BADEA (afiliación SS)", "SEPE datos abiertos"],
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
         "frescura": frescura,

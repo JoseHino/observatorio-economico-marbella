@@ -186,11 +186,22 @@ const pct=(c,p)=>(p==null||!p)?null:(c-p)/p*100;
 const DATA={}, charts={}, rendered={};
 
 /* ---------- fuentes (enlace directo por gráfica) ---------- */
-const SRC_SEPE=['SEPE · datos abiertos (paro y contratos por municipios)','https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html'];
-const SRC_BADEA=['IECA · BADEA (paro registrado municipal, consulta 37016)','https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?idConsulta=37016'];
+const MES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
+  'septiembre','octubre','noviembre','diciembre'];
+/* Página del SEPE del último mes publicado: lleva al dato concreto, no a la portada. */
+function sepeSrc(){
+  const s=((DATA.paro_mensual||{}).serie)||[];
+  const t=s.length?s[s.length-1].t:null;
+  if(!t) return ['SEPE · paro y contratos por municipios',
+    'https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html'];
+  const [a,m]=t.split('-');
+  return ['SEPE · paro y contratos por municipios ('+MES_ES[+m-1]+' '+a+')',
+    'https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios/'+a+'/'+MES_ES[+m-1]+'.html'];
+}
+
 const SRC_AFI=['IECA · BADEA (afiliación a la Seguridad Social, op. b3_291)','https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323'];
 const ineTbl=(id,txt)=>['INE · '+(txt||('tabla '+id)),'https://www.ine.es/jaxiT3/Tabla.htm?t='+id];
-const ineSerie=(cod,txt)=>['INE Tempus3 · '+(txt||('serie '+cod)),'https://servicios.ine.es/wstempus/js/ES/DATOS_SERIE/'+cod+'?nult=24'];
+const ineSerie=(cod,txt)=>['INE · '+(txt||('serie '+cod)),'https://www.ine.es/consul/serie.do?s='+cod];
 
 /* ---------- tema claro Chart.js ---------- */
 const COL={c1:'#0071e3',c2:'#ff5a5f',c3:'#f0a020',c4:'#00a8a3',c5:'#9a5cd0',c6:'#ff8a3d',accent:'#0071e3',mut:'#a1a1a6'};
@@ -392,19 +403,19 @@ function buildResumen(){
 function buildLaboral(){
   const el=document.getElementById('laboral');
   const pa=DATA.paro_anual||{};
-  const anualHtml=pa.total?('<div class="h2" style="margin-top:22px">Media anual oficial (IECA)</div>'+
-      '<div class="cs" style="margin-bottom:10px">'+geoTag('Marbella')+'Media anual del paro registrado publicada por el IECA.'+nota('Anual. Se actualiza al cerrarse cada año (fuente IECA · SIMA).')+'</div>'+
+  const anualHtml=pa.total?('<div class="h2" style="margin-top:22px">Media anual del paro registrado</div>'+
+      '<div class="cs" style="margin-bottom:10px">'+geoTag('Marbella')+'Media de los doce meses del año, calculada con el paro registrado del SEPE.'+nota('Anual. Se cierra al completarse el año.')+'</div>'+
       '<div class="kpis">'+
       kpi(fmt(pa.total.v),'Paro medio anual · '+pa.total.y,'',' ')+
       (pa.mujeres?kpi(fmt(pa.mujeres.v),'Mujeres · '+pa.mujeres.y,'',''):'')+
       (pa.hombres?kpi(fmt(pa.hombres.v),'Hombres · '+pa.hombres.y,'',''):'')+
-      '</div><div class="src" style="margin-top:-6px">Fuente: <a href="'+SRC_BADEA[1]+'" target="_blank" rel="noopener">'+SRC_BADEA[0]+'</a></div>'):'';
+      '</div><div class="src" style="margin-top:-6px">Fuente: <a href="'+sepeSrc()[1]+'" target="_blank" rel="noopener">'+sepeSrc()[0]+'</a></div>'):'';
   el.innerHTML='<div class="h2">Mercado laboral · Paro registrado</div>'+
-   '<div class="pdesc">Paro registrado municipal del SEPE (mensual, con desglose por sexo, edad y sector) y media anual oficial del IECA. Todos los datos referidos al municipio de Marbella.</div>'+
+   '<div class="pdesc">Paro registrado municipal del SEPE (mensual, con desglose por sexo, edad y sector) y su media anual. Todos los datos referidos al municipio de Marbella.</div>'+
    '<div class="grid">'+
-    card('c_paro','Paro registrado mensual',geoTag('Marbella')+'Personas inscritas en el SEPE al cierre de cada mes, por sexo'+nota('Mensual. El SEPE publica con ~1-2 meses de desfase.'),'live',SRC_SEPE,true)+
-    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'Distribución del último mes por sector de procedencia'+nota('Mensual. Refleja el último mes disponible.'),'live',SRC_SEPE)+
-    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'Estructura del último mes — útil para empleo juvenil y senior'+nota('Mensual. Refleja el último mes disponible.'),'live',SRC_SEPE)+
+    card('c_paro','Paro registrado mensual',geoTag('Marbella')+'Personas inscritas en el SEPE al cierre de cada mes, por sexo'+nota('Mensual. El SEPE publica con ~1-2 meses de desfase.'),'live',sepeSrc(),true)+
+    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'Distribución del último mes por sector de procedencia'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
+    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'Estructura del último mes — útil para empleo juvenil y senior'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
    '</div>'+anualHtml;
   const s=(DATA.paro_mensual||{}).serie||[];
   if(s.length){
@@ -489,10 +500,10 @@ function buildContr(){
    '<div class="pdesc">Contratos registrados cada mes diferenciando indefinidos y temporales, por sexo y sector. La reforma laboral de 2022 disparó la contratación indefinida.</div>'+
    '<div id="contr-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes'+nota('Mensual. ~1-2 meses de desfase de publicación.'),'live',SRC_SEPE,true)+
-    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual'+nota('Mensual. Calculada como temporales ÷ total del mes.'),'live',SRC_SEPE)+
-    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo'+nota('Mensual. Refleja el último mes disponible.'),'live',SRC_SEPE)+
-    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'Distribución sectorial del último mes'+nota('Mensual. Refleja el último mes disponible.'),'live',SRC_SEPE,true)+
+    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes'+nota('Mensual. ~1-2 meses de desfase de publicación.'),'live',sepeSrc(),true)+
+    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual'+nota('Mensual. Calculada como temporales ÷ total del mes.'),'live',sepeSrc())+
+    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
+    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'Distribución sectorial del último mes'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc(),true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
   const cur=last(s),tt=cur.total?cur.temporales/cur.total*100:0;
@@ -520,8 +531,8 @@ function buildComparativa(){
    '<div class="pdesc">Marbella frente a Málaga, Andalucía y España. Agregados calculados desde el mismo fichero del SEPE, por lo que son plenamente comparables.</div>'+
    '<div id="comp-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_comp_paro','Evolución del paro · índice base 100',geoTag('Marbella · Málaga · Andalucía · España')+'Cada territorio normalizado a 100 en el primer mes: compara la trayectoria'+nota('Mensual. Agregados calculados desde el mismo fichero del SEPE.'),'live',SRC_SEPE,true)+
-    card('c_comp_temp','Tasa de temporalidad comparada',geoTag('Marbella · Málaga · Andalucía · España')+'% de contratos temporales sobre el total, mes a mes'+nota('Mensual. Misma metodología en los cuatro ámbitos.'),'live',SRC_SEPE,true)+
+    card('c_comp_paro','Evolución del paro · índice base 100',geoTag('Marbella · Málaga · Andalucía · España')+'Cada territorio normalizado a 100 en el primer mes: compara la trayectoria'+nota('Mensual. Agregados calculados desde el mismo fichero del SEPE.'),'live',sepeSrc(),true)+
+    card('c_comp_temp','Tasa de temporalidad comparada',geoTag('Marbella · Málaga · Andalucía · España')+'% de contratos temporales sobre el total, mes a mes'+nota('Mensual. Misma metodología en los cuatro ámbitos.'),'live',sepeSrc(),true)+
    '</div>';
   const s=(DATA.comparativa_laboral||{}).serie||[];
   const sp=s.filter(r=>r.paro);
@@ -744,8 +755,8 @@ function buildVivienda(){
    '<div class="note">Nota: no existe estadística pública de compraventa ni de precio a nivel municipal; se muestra el ámbito provincial/autonómico como referencia del mercado en el que se inserta Marbella.</div>'+
    '<div class="grid">'+
     card('c_compraventa','Compraventa de viviendas',geoTag('Provincia de Málaga')+'Operaciones mensuales: nueva y de segunda mano'+nota('Mensual, últimos 12 años. INE · ETDP. No existe dato municipal; se muestra la provincia.'),'live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
-    card('c_ipv','Precio de la vivienda · IPV',geoTag('Andalucía')+'Índice de Precios de Vivienda (base 2015=100), trimestral'+nota('Trimestral. INE · IPV. Máxima desagregación: autonómica.'),'live',ineTbl(76201,'IPV (tabla 76201)'))+
-    card('c_ipv_var','Variación anual del precio',geoTag('Andalucía')+'% de variación interanual del precio de la vivienda'+nota('Trimestral. INE · IPV.'),'live',ineTbl(76201,'IPV (tabla 76201)'))+
+    card('c_ipv','Precio de la vivienda · IPV',geoTag('Andalucía')+'Índice de Precios de Vivienda (base 2015=100), trimestral'+nota('Trimestral. INE · IPV. Máxima desagregación: autonómica.'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
+    card('c_ipv_var','Variación anual del precio',geoTag('Andalucía')+'% de variación interanual del precio de la vivienda'+nota('Trimestral. INE · IPV.'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
    '</div>'+
    '<div class="h2" style="margin-top:34px">Financiación · hipotecas</div>'+
    '<div class="pdesc">Hipotecas constituidas sobre viviendas en la provincia de Málaga: cuántas se firman cada mes y por qué importe medio. Es el indicador que mejor anticipa el enfriamiento o la reactivación de la compraventa.</div>'+
