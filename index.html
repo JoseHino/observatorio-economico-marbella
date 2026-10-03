@@ -129,6 +129,12 @@ nav button[data-s="asistente"].active{background:linear-gradient(135deg,#5a3ee0,
 .ia-puntos::after{content:'';animation:iaDots 1.4s infinite}
 @keyframes iaDots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
 .ia-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ia-pasos{list-style:none;margin:0 0 16px;padding:10px 14px;border-radius:14px;background:var(--tint);border:1px solid var(--hair);font-size:13px;color:var(--mut)}
+.ia-pasos li{padding:3px 0 3px 22px;position:relative}
+.ia-pasos li::before{content:'✓';position:absolute;left:2px;color:var(--good);font-weight:700}
+.ia-pasos li.vivo{color:var(--ink)}
+.ia-pasos li.vivo::before{content:'';left:4px;top:8px;width:9px;height:9px;border-radius:50%;border:2px solid #5a3ee0;border-right-color:transparent;animation:iaGira .8s linear infinite}
+@keyframes iaGira{to{transform:rotate(360deg)}}
 .ia-aviso{margin-top:14px;color:var(--faint);font-size:12px}
 .ia-error{color:var(--bad,#c62828)}
 .ia-datos{margin-top:22px;background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:12px 18px;font-size:13.5px;color:var(--ink2)}
@@ -1228,13 +1234,13 @@ function buildAsistente(){
   const F=DATA.contexto_ia||{},hechos=F.hechos||[];
   el.innerHTML='<div class="ia-hero"><div class="ia-badge">✦ Inteligencia artificial</div>'+
    '<div class="h2" style="margin-top:10px">Asistente de análisis económico</div>'+
-   '<div class="pdesc">Pide un informe, una nota de prensa o una respuesta concreta. El asistente redacta <b>solo con los datos oficiales de este observatorio</b>'+(F.generado?' (actualizados el '+new Date(F.generado).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+')':'')+' y cita el periodo y la fuente de cada cifra.</div></div>'+
+   '<div class="pdesc">Pide un informe, una nota de prensa o una respuesta concreta. Los botones redactan al momento con los datos clave; para la pregunta libre, un <b>agente</b> consulta él mismo las 232 series del observatorio, hace los cálculos y te responde. Siempre <b>solo con datos oficiales de este observatorio</b>'+(F.generado?' (actualizados el '+new Date(F.generado).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+')':'')+' y cita el periodo y la fuente de cada cifra.</div></div>'+
    '<div class="ia-botones">'+IA_BOTONES.map(([m,t,d])=>'<button class="ia-boton" data-modo="'+m+'"><span class="ia-bt">'+t+'</span><span class="ia-bd">'+d+'</span></button>').join('')+'</div>'+
    '<div class="ia-caja"><textarea id="ia-pregunta" maxlength="600" rows="2" placeholder="Escribe aquí lo que quieres saber… (por ejemplo: '+escHtml(IA_EJEMPLOS[0])+')"></textarea>'+
    '<button id="ia-enviar" class="ia-enviar" title="Generar (Ctrl+Intro)">Generar ➜</button></div>'+
    '<div class="ia-ejemplos">'+IA_EJEMPLOS.map(e=>'<button class="ia-ej">'+escHtml(e)+'</button>').join('')+'</div>'+
    '<div id="ia-salida" class="ia-salida" hidden><div class="ia-cab"><span id="ia-titulo"></span><span id="ia-estado" class="ia-estado"></span></div>'+
-   '<div id="ia-texto" class="ia-texto"></div>'+
+   '<ol id="ia-pasos" class="ia-pasos" hidden></ol><div id="ia-texto" class="ia-texto"></div>'+
    '<div class="ia-acciones" id="ia-acciones" hidden><button class="btn" id="ia-copiar">Copiar texto</button><button class="btn" id="ia-bajar">Descargar .txt</button><button class="btn" id="ia-otra">Nueva consulta</button></div>'+
    '<div class="ia-aviso">Texto generado por IA (Claude, de Anthropic) a partir de los datos oficiales del observatorio. Revísalo antes de difundirlo.</div></div>'+
    (hechos.length?'<details class="ia-datos"><summary>Ver los '+hechos.length+' datos que puede usar el asistente</summary><ul>'+
@@ -1252,27 +1258,44 @@ function buildAsistente(){
   document.getElementById('ia-otra').addEventListener('click',()=>{document.getElementById('ia-salida').hidden=true;ta.value='';ta.focus();});
 }
 async function iaPedir(modo,pregunta,titulo){
-  const sal=document.getElementById('ia-salida'),tx=document.getElementById('ia-texto'),est=document.getElementById('ia-estado'),acc=document.getElementById('ia-acciones');
+  const sal=document.getElementById('ia-salida'),tx=document.getElementById('ia-texto'),est=document.getElementById('ia-estado'),
+        acc=document.getElementById('ia-acciones'),pasos=document.getElementById('ia-pasos');
   sal.hidden=false;acc.hidden=true;document.getElementById('ia-titulo').textContent=titulo;
-  tx.innerHTML='<span class="ia-cursor"></span>';est.innerHTML='Analizando los datos<span class="ia-puntos"></span>';est.className='ia-estado';
+  tx.innerHTML='';pasos.innerHTML='';pasos.hidden=true;
+  est.innerHTML='Conectando<span class="ia-puntos"></span>';est.className='ia-estado';
   sal.scrollIntoView({behavior:'smooth',block:'start'});
   document.querySelectorAll('.ia-boton,#ia-enviar').forEach(b=>b.disabled=true);
   if(iaCtrl)iaCtrl.abort();iaCtrl=new AbortController();iaTexto='';
+  const t0=Date.now();let nPasos=0,fecha='';
+  /* cada evento del agente: estado (lo que está haciendo), texto (la respuesta), fin o error */
+  const paso=t=>{pasos.hidden=false;pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));
+    pasos.insertAdjacentHTML('beforeend','<li class="vivo">'+escHtml(t)+'</li>');nPasos++;
+    est.innerHTML=escHtml(t)+'<span class="ia-puntos"></span>';};
+  const evento=ev=>{
+    if(ev.tipo==='estado')paso(ev.texto);
+    else if(ev.tipo==='texto'){if(!iaTexto){pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));est.innerHTML='Redactando<span class="ia-puntos"></span>';}
+      iaTexto+=ev.texto;tx.innerHTML=iaRender(iaTexto)+'<span class="ia-cursor"></span>';}
+    else if(ev.tipo==='fin')fecha=ev.datos||'';
+    else if(ev.tipo==='error')throw new Error(ev.texto);
+  };
   try{
     if(!IA_URL)throw new Error('El asistente todavía no está conectado a su servidor.');
     const r=await fetch(IA_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({modo,pregunta}),signal:iaCtrl.signal});
     if(!r.ok)throw new Error(await r.text()||('Error '+r.status));
-    est.textContent='Redactando…';
-    const rd=r.body.getReader(),dec=new TextDecoder();
+    const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
     for(;;){const{done,value}=await rd.read();if(done)break;
-      iaTexto+=dec.decode(value,{stream:true});tx.innerHTML=iaRender(iaTexto)+'<span class="ia-cursor"></span>';}
+      buf+=dec.decode(value,{stream:true});let k;
+      while((k=buf.indexOf('\n'))>=0){const l=buf.slice(0,k).trim();buf=buf.slice(k+1);if(l)evento(JSON.parse(l));}}
+    if(buf.trim())evento(JSON.parse(buf));
     tx.innerHTML=iaRender(iaTexto);
-    const f=r.headers.get('X-Datos-Actualizados');
-    est.textContent='Listo'+(f?' · datos del '+new Date(f).toLocaleDateString('es-ES',{day:'numeric',month:'long'}):'');est.className='ia-estado ok';
+    const seg=Math.round((Date.now()-t0)/1000);
+    est.textContent='Listo en '+seg+' s'+(modo==='libre'&&nPasos>1?' · '+(nPasos-1)+' consultas a los datos':'')+
+      (fecha?' · datos del '+new Date(fecha).toLocaleDateString('es-ES',{day:'numeric',month:'long'}):'');
+    est.className='ia-estado ok';pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));
     acc.hidden=false;
   }catch(e){
     if(e.name==='AbortError')return;
-    tx.innerHTML='<p class="ia-error">'+escHtml(e.message||'No se ha podido generar el texto.')+'</p>';est.textContent='';
+    tx.innerHTML=(iaTexto?iaRender(iaTexto):'')+'<p class="ia-error">'+escHtml(e.message||'No se ha podido generar el texto.')+'</p>';est.textContent='';
   }finally{document.querySelectorAll('.ia-boton,#ia-enviar').forEach(b=>b.disabled=false);}
 }
 

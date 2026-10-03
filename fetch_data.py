@@ -14,7 +14,7 @@ local:  python fetch_data.py   ·   solo usa la librería estándar.
 Marbella = municipio INE 29069 · provincia Málaga 29 · CCAA Andalucía 01 ·
 nodo BADEA 2980.
 """
-import json, os, sys, io, csv, urllib.request, urllib.error, datetime
+import json, os, sys, io, csv, re, urllib.request, urllib.error, datetime
 
 try:                       # consola UTF-8 (Windows usa cp1252 por defecto)
     sys.stdout.reconfigure(encoding="utf-8")
@@ -82,7 +82,7 @@ def get_json(url):
 #
 # Regla ahora: un dato publicado no se sustituye NUNCA por nada. Si la fuente no
 # contesta, se conserva lo último bueno y se dice en el log.
-_SIN_GUARDIA = {"meta.json", "contexto_ia.json"}   # sin periodos propios: se reescriben siempre
+_SIN_GUARDIA = {"meta.json", "contexto_ia.json", "series_ia.json"}   # sin periodos propios: se reescriben siempre
 CONSERVADOS = []               # ficheros que esta pasada NO ha podido refrescar
 
 def _leer(name):
@@ -1643,6 +1643,241 @@ def contexto_ia():
     print(f"    · {len(H)} hechos")
     write("contexto_ia.json", data)
 
+# ------------------------------------- ALMACÉN DE SERIES PARA EL AGENTE DE IA
+# El agente del panel (worker/) contesta preguntas libres consultando ESTE fichero con
+# herramientas (buscar, consultar, calcular). Cada serie lleva su ficha: qué mide,
+# unidad, ámbito, fuente y advertencias metodológicas, para que no mezcle conceptos
+# (paro registrado ≠ tasa de paro EPA, afiliados por residencia ≠ por lugar de trabajo…).
+NOTA_PARO = "Paro registrado: demandantes de empleo parados inscritos en los servicios públicos de empleo el último día del mes. No es la tasa de paro de la EPA."
+NOTA_AFI_RES = "Afiliaciones de personas que RESIDEN en Marbella (trabajen donde trabajen). Mensual desde julio de 2021; antes, trimestral."
+# Palabras con las que alguien buscaría una serie sin saber cómo se llama.
+GENTILICIOS = {
+    "Reino Unido": "británicos ingleses escoceses UK", "Países Bajos": "holandeses neerlandeses Holanda",
+    "Francia": "franceses", "Irlanda": "irlandeses", "Alemania": "alemanes", "Suecia": "suecos escandinavos",
+    "Noruega": "noruegos escandinavos", "Dinamarca": "daneses escandinavos", "Finlandia": "finlandeses escandinavos",
+    "Polonia": "polacos", "Bélgica": "belgas", "Italia": "italianos", "Portugal": "portugueses", "Suiza": "suizos",
+    "Estados Unidos de América": "estadounidenses norteamericanos americanos EEUU USA", "Marruecos": "marroquíes",
+    "Rusia": "rusos", "Ucrania": "ucranianos", "Austria": "austriacos", "Rumanía": "rumanos", "Canadá": "canadienses",
+    "Arabia Saudí": "saudíes árabes", "Emiratos Árabes Unidos": "emiratíes árabes", "China": "chinos", "Israel": "israelíes",
+}
+SINONIMOS = {
+    "paro": "desempleo parados desempleados", "edad_menor25": "jóvenes juvenil", "edad_mayor45": "mayores senior",
+    "contratos": "contratación empleo", "afiliad": "empleo trabajadores ocupados seguridad social",
+    "autonomos": "autónomos emprendedores RETA", "hotel": "hoteles hotelero alojamiento", "turistas": "turismo visitantes",
+    "vft": "pisos turísticos alquiler vacacional VUT", "vut": "pisos turísticos alquiler vacacional",
+    "compraventas": "venta de viviendas transacciones mercado inmobiliario", "valor_tasado": "precio vivienda metro cuadrado m2",
+    "alquiler": "renta arrendamiento precio del alquiler", "residentes": "población habitantes vecinos",
+    "nac_extranjera": "inmigrantes extranjeros", "migraciones": "inmigración emigración llegadas salidas",
+    "empresas": "tejido empresarial pymes", "establecimientos": "locales negocios comercios pymes", "sociedades": "emprendimiento creación de empresas",
+    "renta": "ingresos riqueza pobreza", "ipc": "inflación precios", "deuda": "endeudamiento hacienda municipal ayuntamiento",
+    "electricidad": "energía consumo eléctrico", "matriculaciones": "coches vehículos ventas de coches",
+    "nacionalidad_extranjera": "inmigrantes extranjeros", "extranjeros": "inmigrantes",
+}
+NOTA_TMOV = "Estadística experimental del INE basada en la posición de teléfonos móviles: cuenta a quien pasa al menos una noche en Marbella sin residir en ella, en cualquier tipo de alojamiento."
+
+def series_ia():
+    step("Almacén de series para el agente de IA")
+    S = {}
+
+    def add(sid, nombre, unidad, frecuencia, fuente, puntos, ambito="Marbella", nota="", claves=""):
+        pts = []
+        for p in puntos or []:
+            if not isinstance(p, dict) or p.get("v") is None:
+                continue
+            per = p.get("t") or (str(p["y"]) if p.get("y") is not None else None)
+            if per:
+                pts.append([per, p["v"]])
+        if pts:
+            pts.sort(key=lambda x: x[0])
+            claves = " ".join(filter(None, [claves] + [v for k, v in SINONIMOS.items() if k in sid]))
+            S[sid] = {"nombre": nombre, "unidad": unidad, "frecuencia": frecuencia,
+                      "ambito": ambito, "fuente": fuente, "nota": nota, "claves": claves, "puntos": pts}
+
+    L = lambda n: _leer(n) or {}
+    slug = lambda x: re.sub(r"[^a-z0-9]+", "_", x.lower().translate(str.maketrans("áéíóúüñ", "aeiouun"))).strip("_")
+    camp = lambda serie, clave: [{"t": r["t"], "v": r.get(clave)} for r in serie or []]
+    sub = lambda serie, a, b: [{"t": r["t"], "v": (r.get(a) or {}).get(b)} for r in serie or []]
+
+    # Paro y contratos
+    pm = L("paro_mensual.json").get("serie") or []
+    ARG = "Observatorio Argos (SAE) y SEPE"
+    add("paro_total", "Paro registrado", "personas", "mensual", ARG, camp(pm, "total"), nota=NOTA_PARO)
+    add("paro_hombres", "Paro registrado · hombres", "personas", "mensual", ARG, camp(pm, "hombres"), nota=NOTA_PARO)
+    add("paro_mujeres", "Paro registrado · mujeres", "personas", "mensual", ARG, camp(pm, "mujeres"), nota=NOTA_PARO)
+    for k, n in (("menor25", "menores de 25 años"), ("de25a44", "de 25 a 44 años"), ("mayor45", "de 45 y más años")):
+        add(f"paro_edad_{k}", f"Paro registrado · {n}", "personas", "mensual", "SEPE", sub(pm, "edad", k), nota=NOTA_PARO)
+    for k, n in (("servicios", "servicios"), ("construccion", "construcción"), ("industria", "industria"),
+                 ("agricultura", "agricultura"), ("sin_empleo", "sin empleo anterior")):
+        add(f"paro_sector_{k}", f"Paro registrado · {n}", "personas", "mensual", "SEPE", sub(pm, "sectores", k), nota=NOTA_PARO)
+    H = L("argos_historico.json")
+    add("paro_historico", "Paro registrado (serie larga desde 2006)", "personas", "mensual", "Observatorio Argos (SAE)",
+        H.get("paro"), nota=NOTA_PARO + " Útil para comparar con el mismo mes de años anteriores.")
+    add("contratos_historico", "Contratos registrados (serie larga desde 2009)", "contratos", "mensual",
+        "Observatorio Argos (SAE)", H.get("contratos"))
+    cm = L("contratos_mensual.json").get("serie") or []
+    add("contratos_total", "Contratos registrados", "contratos", "mensual", ARG, camp(cm, "total"))
+    add("contratos_indefinidos", "Contratos indefinidos (iniciales y convertidos)", "contratos", "mensual", ARG, camp(cm, "indefinidos"))
+    add("contratos_temporales", "Contratos temporales", "contratos", "mensual", ARG, camp(cm, "temporales"))
+    add("contratos_pct_temporales", "Tasa de temporalidad de la contratación", "%", "mensual", ARG,
+        [{"t": r["t"], "v": round(r["temporales"] / r["total"] * 100, 1)} for r in cm if r.get("total")])
+    for k, n in (("servicios", "servicios"), ("construccion", "construcción"), ("industria", "industria"), ("agricultura", "agricultura")):
+        add(f"contratos_sector_{k}", f"Contratos · {n}", "contratos", "mensual", ARG, sub(cm, "sectores", k))
+    comp = L("comparativa_laboral.json").get("serie") or []
+    for terr, n in (("malaga", "provincia de Málaga"), ("andalucia", "Andalucía"), ("espana", "España")):
+        add(f"paro_{terr}", f"Paro registrado · {n}", "personas", "mensual", "SEPE", sub(comp, "paro", terr), ambito=n, nota=NOTA_PARO)
+        add(f"temporalidad_{terr}", f"Tasa de temporalidad de la contratación · {n}", "%", "mensual", "SEPE",
+            sub(comp, "temporalidad", terr), ambito=n)
+    pa = L("paro_anual.json")
+    if pa.get("total"):
+        add("paro_media_anual", "Paro registrado medio anual", "personas", "anual", "SEPE", [pa["total"]], nota=NOTA_PARO)
+
+    # Afiliación
+    A = L("afiliacion.json")
+    REG = {"total": "total", "general": "Régimen General", "autonomos": "autónomos (RETA)", "agrario": "Sistema Especial Agrario",
+           "mar": "Régimen del Mar", "hogar": "Empleados del Hogar"}
+    for k, n in REG.items():
+        add(f"afiliados_{k}", f"Afiliados a la Seguridad Social · {n}", "personas", "mensual", "IECA a partir de la TGSS",
+            (A.get("marbella") or {}).get(k), nota=NOTA_AFI_RES)
+    for terr, n in (("malaga", "provincia de Málaga"), ("andalucia", "Andalucía")):
+        for k in ("total", "autonomos"):
+            add(f"afiliados_{k}_{terr}", f"Afiliados a la Seguridad Social · {REG[k]} · {n}", "personas", "mensual",
+                "IECA a partir de la TGSS", (A.get(terr) or {}).get(k), ambito=n)
+
+    # SIMA: nacionalidad, natalidad y actividad local
+    Si = L("sima.json")
+    for clave, base, unidad, nota in (
+        ("paro", "Paro registrado medio anual", "personas", NOTA_PARO),
+        ("contratos", "Contratos registrados en el año", "contratos", ""),
+        ("afiliados", "Afiliaciones medias anuales con lugar de TRABAJO en Marbella", "afiliaciones",
+         "Por lugar de trabajo, no de residencia. Desde 2022.")):
+        for k, n in (("total", "total"), ("espanola", "españoles"), ("extranjera", "extranjeros")):
+            add(f"{clave}_nacionalidad_{k}", f"{base} · {n}", unidad, "anual", "IECA · SIMA",
+                [{"y": r["y"], "v": r.get(k)} for r in Si.get(clave) or []], nota=nota)
+    for g, n in _SIMA_GRUPOS.items():
+        add(f"paro_extranjeros_{n}", f"Paro registrado medio anual de extranjeros · {g}", "personas", "anual", "IECA · SIMA",
+            [{"y": r["y"], "v": (r.get("grupos") or {}).get(n)} for r in Si.get("paro") or []], nota=NOTA_PARO)
+    for k, n in (("nacimientos", "Nacimientos"), ("defunciones", "Defunciones"), ("crecimiento", "Crecimiento vegetativo")):
+        add(f"mnp_{k}", n, "personas", "anual", "IECA · Movimiento Natural de la Población",
+            [{"y": r["y"], "v": r.get(k)} for r in Si.get("mnp") or []])
+    mats = []
+    for r in Si.get("matriculaciones") or []:
+        for i, m in enumerate(_MESES_NOM):
+            if r.get(m.capitalize()) is not None:
+                mats.append({"t": f"{r['y']}-{i + 1:02d}", "v": r[m.capitalize()]})
+    add("matriculaciones", "Vehículos matriculados", "vehículos", "mensual (publicado por años completos)", "IECA a partir de la DGT", mats)
+    for clave, base, unidad, fuente in (("vehiculos", "Parque de vehículos", "vehículos", "IECA a partir de la DGT"),
+                                        ("electricidad", "Consumo de energía eléctrica", "MWh", "IECA a partir de Endesa"),
+                                        ("establecimientos", "Establecimientos con actividad económica", "establecimientos", "IECA · directorio de establecimientos"),
+                                        ("plazas_turisticas", "Plazas en alojamientos turísticos reglados", "plazas", "IECA · Registro de Turismo de Andalucía")):
+        cats = sorted({k for r in Si.get(clave) or [] for k in r if k != "y"})
+        for cat in cats:
+            sid = f"{clave}_" + slug(cat)
+            add(sid, f"{base} · {cat.replace('_', ' y ')}", unidad, "anual", fuente,
+                [{"y": r["y"], "v": r.get(cat)} for r in Si.get(clave) or [] if not isinstance(r.get(cat), list)])
+    vf = [r for r in Si.get("vft") or [] if isinstance(r.get("Viviendas con fines turísticos"), list)]
+    add("vft_viviendas", "Viviendas con fines turísticos inscritas", "viviendas", "anual", "IECA · Registro de Turismo de Andalucía",
+        [{"y": r["y"], "v": r["Viviendas con fines turísticos"][0]} for r in vf])
+    add("vft_plazas", "Plazas en viviendas con fines turísticos", "plazas", "anual", "IECA · Registro de Turismo de Andalucía",
+        [{"y": r["y"], "v": r["Viviendas con fines turísticos"][1]} for r in vf])
+
+    # Turismo
+    T = L("turismo.json")
+    EOH = "INE · Encuesta de Ocupación Hotelera"
+    HOT = {"viajeros": ("Viajeros alojados en hoteles", "viajeros"), "pernoctaciones": ("Pernoctaciones hoteleras", "pernoctaciones"),
+           "adr": ("Tarifa media diaria hotelera (ADR)", "€"), "revpar": ("Ingreso por habitación disponible (RevPAR)", "€"),
+           "ocup_plazas": ("Ocupación hotelera por plazas", "%"), "ocup_habit": ("Ocupación hotelera por habitaciones", "%"),
+           "estancia_media": ("Estancia media en hoteles", "días"), "personal": ("Personal empleado en hoteles", "personas"),
+           "establecimientos": ("Hoteles abiertos", "establecimientos"), "plazas": ("Plazas hoteleras estimadas", "plazas"),
+           "viajeros_esp": ("Viajeros en hoteles residentes en España", "viajeros"),
+           "viajeros_ext": ("Viajeros en hoteles residentes en el extranjero", "viajeros"),
+           "pernoct_esp": ("Pernoctaciones hoteleras de residentes en España", "pernoctaciones"),
+           "pernoct_ext": ("Pernoctaciones hoteleras de residentes en el extranjero", "pernoctaciones")}
+    for k, (n, u) in HOT.items():
+        add(f"hotel_{k}", n, u, "mensual", EOH, (T.get("hoteles") or {}).get(k), nota="Solo establecimientos hoteleros.")
+    for k, (n, u) in {"viajeros": ("Viajeros en apartamentos turísticos", "viajeros"), "pernoctaciones": ("Pernoctaciones en apartamentos turísticos", "pernoctaciones"),
+                      "ocup_plazas": ("Ocupación de apartamentos turísticos por plazas", "%"), "estancia_media": ("Estancia media en apartamentos turísticos", "días"),
+                      "plazas": ("Plazas en apartamentos turísticos", "plazas")}.items():
+        add(f"apart_{k}", n, u, "mensual", "INE · Encuesta de Ocupación en Apartamentos Turísticos", (T.get("apartamentos") or {}).get(k))
+    for k, (n, u) in {"viviendas": ("Viviendas turísticas (estadística experimental INE)", "viviendas"),
+                      "plazas": ("Plazas en viviendas turísticas (INE)", "plazas"), "pct_viviendas": ("% de viviendas turísticas sobre el total", "%")}.items():
+        add(f"vut_ine_{k}", n, u, "semestral", "INE · Viviendas turísticas (experimental)", (T.get("vut") or {}).get(k),
+            nota="Distinta del Registro de Turismo de Andalucía (series vft_*): el INE detecta anuncios en plataformas.")
+    for k, (n, u) in {"viajeros": ("Viajeros en hoteles · Málaga capital", "viajeros"), "pernoctaciones": ("Pernoctaciones hoteleras · Málaga capital", "pernoctaciones"),
+                      "adr": ("ADR hotelera · Málaga capital", "€"), "revpar": ("RevPAR · Málaga capital", "€")}.items():
+        add(f"malaga_capital_{k}", n, u, "mensual", EOH, (T.get("malaga") or {}).get(k), ambito="Málaga capital")
+    TM = L("turismo_moviles.json")
+    I, N = TM.get("internacional") or {}, TM.get("nacional") or {}
+    add("turistas_extranjeros_total", "Turistas extranjeros (todos los alojamientos)", "turistas", "mensual", "INE · turismo con móviles", I.get("total"), nota=NOTA_TMOV)
+    for pais, pts in (I.get("paises") or {}).items():
+        add(f"turistas_pais_{slug(pais)}", f"Turistas residentes en {pais}", "turistas", "mensual", "INE · turismo con móviles", pts,
+            nota=NOTA_TMOV, claves=GENTILICIOS.get(pais, ""))
+    add("turistas_nacionales_total", "Turistas españoles de otras provincias", "turistas", "mensual", "INE · turismo con móviles",
+        N.get("total"), nota=NOTA_TMOV + " No incluye a los residentes en la provincia de Málaga.")
+    for ccaa, pts in (N.get("origen") or {}).items():
+        add(f"turistas_ccaa_{slug(ccaa)}", f"Turistas residentes en {ccaa}", "turistas", "mensual", "INE · turismo con móviles", pts, nota=NOTA_TMOV)
+
+    # Población
+    D = L("demografia.json")
+    PAD = "INE · Padrón municipal"
+    add("poblacion", "Población empadronada a 1 de enero", "habitantes", "anual", PAD, D.get("poblacion"))
+    add("poblacion_hombres", "Población empadronada · hombres", "habitantes", "anual", PAD, D.get("poblacion_h"))
+    add("poblacion_mujeres", "Población empadronada · mujeres", "habitantes", "anual", PAD, D.get("poblacion_m"))
+    for k, (n, u) in {"edad_media": ("Edad media de la población", "años"), "pct_menor18": ("% de población menor de 18 años", "%"),
+                      "pct_mayor65": ("% de población de 65 y más años", "%"), "pct_espanola": ("% de población de nacionalidad española", "%"),
+                      "tamano_hogar": ("Tamaño medio del hogar", "personas"), "pct_unipersonales": ("% de hogares unipersonales", "%")}.items():
+        add(f"atlas_{k}", n, u, "anual", "INE · Atlas de distribución de renta", D.get(k))
+    ECP = "INE · Estadística Continua de Población"
+    for k, n in {"nac_espanola": "Residentes de nacionalidad española", "nac_extranjera": "Residentes de nacionalidad extranjera",
+                 "ext_hombres": "Residentes extranjeros · hombres", "ext_mujeres": "Residentes extranjeros · mujeres",
+                 "nacidos_espana": "Residentes nacidos en España", "nacidos_extranjero": "Residentes nacidos en el extranjero",
+                 "edad_0_15": "Residentes de 0 a 15 años", "edad_16_24": "Residentes de 16 a 24 años", "edad_25_44": "Residentes de 25 a 44 años",
+                 "edad_45_64": "Residentes de 45 a 64 años", "edad_65": "Residentes de 65 y más años"}.items():
+        add(f"residentes_{k}", n + " (a 1 de enero)", "personas", "anual", ECP, (D.get("residentes") or {}).get(k))
+    for k, n in {"inmig_extranjero": "Llegadas de residentes desde el extranjero", "emig_extranjero": "Salidas de residentes al extranjero",
+                 "saldo_total": "Saldo migratorio total", "saldo_exterior": "Saldo migratorio con el extranjero",
+                 "saldo_interior": "Saldo migratorio con el resto de España", "inter_in_esp": "Llegadas desde otros municipios · españoles",
+                 "inter_in_ext": "Llegadas desde otros municipios · extranjeros", "inter_out_esp": "Salidas a otros municipios · españoles",
+                 "inter_out_ext": "Salidas a otros municipios · extranjeros"}.items():
+        add(f"migraciones_{k}", n, "personas", "anual", "INE · Estadística de Migraciones", (D.get("migraciones") or {}).get(k))
+
+    # Empresas, renta, vivienda, precios y hacienda
+    E = L("empresas.json")
+    add("empresas_total", "Empresas activas", "empresas", "anual", "INE · DIRCE", E.get("total"))
+    for s in E.get("sectores") or []:
+        add(f"empresas_{slug(s['rama'])}", f"Empresas activas · {s['rama']}", "empresas", "anual", "INE · DIRCE", s.get("serie"))
+    SO = L("sociedades.json")
+    for k, n in {"constituidas": "Sociedades mercantiles constituidas", "disueltas": "Sociedades mercantiles disueltas",
+                 "saldo_neto": "Saldo neto de sociedades (constituidas − disueltas)", "capital_constituidas": "Capital suscrito en sociedades constituidas"}.items():
+        add(f"sociedades_{k}", n, "miles €" if k.startswith("capital") else "sociedades", "mensual", "INE · Sociedades Mercantiles", SO.get(k), ambito="provincia de Málaga")
+    R = L("renta.json")
+    for k, (n, u) in {"neta_persona": ("Renta neta media por persona", "€"), "neta_hogar": ("Renta neta media por hogar", "€"),
+                      "bruta_persona": ("Renta bruta media por persona", "€"), "bruta_hogar": ("Renta bruta media por hogar", "€"),
+                      "media_uc": ("Renta media por unidad de consumo", "€"), "mediana_uc": ("Renta mediana por unidad de consumo", "€"),
+                      "riesgo_pobreza": ("% de población con renta por debajo del 60 % de la mediana", "%")}.items():
+        add(f"renta_{k}", n, u, "anual", "INE · Atlas de distribución de renta", R.get(k))
+    VM = L("vivienda_marbella.json")
+    MIV = "Ministerio de Vivienda (MIVAU)"
+    for k, n in {"total": "Compraventas de vivienda", "nueva": "Compraventas de vivienda nueva", "segunda_mano": "Compraventas de vivienda de segunda mano"}.items():
+        add(f"compraventas_{k}", n, "operaciones", "trimestral", MIV + ", datos notariales", (VM.get("compraventas") or {}).get(k))
+    for k, n in {"total": "Valor tasado medio de la vivienda libre", "hasta5": "Valor tasado · vivienda de hasta 5 años",
+                 "mas5": "Valor tasado · vivienda de más de 5 años"}.items():
+        add(f"valor_tasado_{k}", n, "€/m²", "trimestral", MIV, (VM.get("valor_tasado") or {}).get(k))
+    add("alquiler_indice", "Índice de precios de vivienda en alquiler (2015=100)", "índice", "anual", "INE · IPVA", (VM.get("alquiler") or {}).get("indice"))
+    add("alquiler_var_anual", "Variación anual del precio del alquiler", "%", "anual", "INE · IPVA", (VM.get("alquiler") or {}).get("var_anual"))
+    V = L("vivienda.json")
+    add("compraventas_provincia", "Compraventas de vivienda · provincia de Málaga", "operaciones", "mensual", "INE · ETDP", (V.get("compraventa") or {}).get("general"), ambito="provincia de Málaga")
+    add("ipv_andalucia_var", "Variación anual del Índice de Precios de Vivienda · Andalucía", "%", "trimestral", "INE · IPV", (V.get("precio") or {}).get("var_anual"), ambito="Andalucía")
+    add("hipotecas_provincia", "Hipotecas sobre viviendas · provincia de Málaga", "hipotecas", "mensual", "INE · Estadística de Hipotecas", (V.get("hipotecas") or {}).get("numero"), ambito="provincia de Málaga")
+    add("hipoteca_importe_medio", "Importe medio por hipoteca · provincia de Málaga", "€", "mensual", "INE · Estadística de Hipotecas", (V.get("hipotecas") or {}).get("importe_medio"), ambito="provincia de Málaga")
+    C = L("coyuntura.json")
+    add("ipc_andalucia", "Inflación anual (IPC) · Andalucía", "%", "mensual", "INE · IPC", (C.get("ipc") or {}).get("var_anual"), ambito="Andalucía")
+    add("ipc_espana", "Inflación anual (IPC) · España", "%", "mensual", "INE · IPC", (C.get("ipc") or {}).get("var_anual_es"), ambito="España")
+    add("comercio_minorista_andalucia", "Ventas del comercio minorista, variación anual · Andalucía", "%", "mensual", "INE · ICM", (C.get("icm") or {}).get("var_anual"), ambito="Andalucía")
+    add("deuda_viva", "Deuda viva del Ayuntamiento a 31 de diciembre", "€", "anual", "Ministerio de Hacienda", L("deuda.json").get("serie"), ambito="Ayuntamiento de Marbella")
+
+    print(f"    · {len(S)} series")
+    write("series_ia.json", {"generado": datetime.date.today().isoformat(), "series": S})
+
 # ---------------------------------------------------------------- VIGILANTE DE FRESCURA
 # Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
 # obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
@@ -1795,7 +2030,7 @@ def auditar_frescura():
     rep, alertas = {}, []
     for name in sorted(os.listdir(OUT)):
         # contexto_ia.json es un derivado (resumen para el asistente), no una fuente
-        if not name.endswith(".json") or name in ("meta.json", "contexto_ia.json"):
+        if not name.endswith(".json") or name in ("meta.json", "contexto_ia.json", "series_ia.json"):
             continue
         try:
             obj = json.load(io.open(os.path.join(OUT, name), encoding="utf-8"))
@@ -1843,7 +2078,7 @@ def main():
     for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
                afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
                turismo_moviles, deuda_viva, argos_historico,
-               contexto_ia):          # contexto_ia, el último: resume todo lo anterior
+               contexto_ia, series_ia):   # los dos últimos: resumen todo lo anterior para la IA
         try:
             fn()
         except Exception as e:

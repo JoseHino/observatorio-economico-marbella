@@ -96,6 +96,11 @@ fetch_data.py ──► data/contexto_ia.json   (21 hechos con cifra, periodo y 
 index.html ──POST──► worker/ (Cloudflare Worker) ──► API de Claude ──► texto en streaming
 ```
 
+- **Botones**: una llamada a Claude con la ficha `data/contexto_ia.json` (rápido, unos segundos).
+- **Pregunta libre**: un **agente** con tres herramientas sobre `data/series_ia.json` (232 series, cada
+  una con unidad, ámbito, fuente, nota metodológica y palabras clave): `buscar_indicadores`,
+  `consultar_serie` y `calcular` (variaciones, récords frente al mismo mes, máximos, medias, sumas).
+  Los cálculos los hace el código del Worker; el modelo solo redacta. En pantalla se ven sus pasos.
 - `contexto_ia()` calcula en Python variaciones y récords frente al mismo mes de todos los
   años (histórico de Argos desde 2006, `data/argos_historico.json`); la IA no calcula nada.
 - Las instrucciones y los encargos de los botones viven en el Worker, no en el navegador.
