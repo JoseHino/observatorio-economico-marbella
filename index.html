@@ -167,7 +167,9 @@ footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-si
 <a href="https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html" target="_blank">SEPE · datos abiertos</a> ·
 <a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323" target="_blank">IECA · Afiliación a la Seguridad Social</a> ·
 <a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/sima/ficha.htm?mun=29069" target="_blank">IECA · SIMA (fichas municipales)</a> ·
-<a href="https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=34000000" target="_blank">Ministerio de Vivienda · transacciones y valor tasado</a>.<br>
+<a href="https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=34000000" target="_blank">Ministerio de Vivienda · transacciones y valor tasado</a> ·
+<a href="https://www.ine.es/experimental/turismo_moviles/experimental_turismo_moviles.htm" target="_blank">INE · turismo medido con móviles</a> ·
+<a href="https://www.hacienda.gob.es/es-ES/CDI/Paginas/SistemasFinanciacionDeuda/InformacionEELLs/DeudaViva.aspx" target="_blank">Ministerio de Hacienda · deuda viva</a>.<br>
 El proceso de actualización (<code>fetch_data.py</code>) se ejecuta en GitHub Actions y vuelca los datos a <code>/data/*.json</code>, leídos desde el mismo origen. El paro y la contratación de Marbella se toman del Observatorio Argos del Servicio Andaluz de Empleo, que los publica el mismo día en que se anuncia el paro (coinciden con el SEPE, que los publica días después); del SEPE se toman el paro por edad y sector y los agregados de comparación. La comparativa territorial (Marbella · Málaga · Andalucía · España) se calcula agregando el mismo fichero municipal del SEPE, por lo que las cifras son plenamente comparables. La compraventa de vivienda, las hipotecas, el IPV y los índices de precios y consumo se ofrecen a nivel provincial (Málaga) o autonómico (Andalucía), su máxima desagregación oficial.
 </div></footer>
 
@@ -313,7 +315,7 @@ function CARD_ULT(){
     c_soc:M(socT), c_soc_saldo:M(socT),
     c_renta:AN(renY), c_renta_uc:AN(renY), c_pobreza:AN(renY),
     c_pob:AN(demY), c_nac:AN(demYatlas), c_edad:AN(demYatlas),
-    ...EXTRA_ULT(D),
+    ...EXTRA_ULT(D), ...EXTRA_ULT2(D),
     c_compraventa:M(cvT), c_ipv:TR(ipvT), c_ipv_var:TR(ipvT),
     c_hipo:M(hipT), c_hipo_imp:M(hipT),
     c_ipc_var:M(ipcT), c_ipc_idx:M(ipcT), c_icm_var:M(icmT), c_icm_idx:M(icmT),
@@ -336,7 +338,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -1022,9 +1024,136 @@ function EXTRA_ULT(D){
     c_mb_cv:T(lt((VM.compraventas||{}).total)),c_mb_vt:T(lt((VM.valor_tasado||{}).total)),c_mb_alq:A(ly((VM.alquiler||{}).indice))};
 }
 
+/* ================= AMPLIACIÓN 2 · TURISMO CON MÓVILES, OFERTA REGLADA, PULSO LOCAL ================= */
+const SRC_TMOV_INT=ineTbl(52048,'turismo receptor con móviles (tabla 52048)');
+const SRC_TMOV_NAC=ineTbl(53464,'turismo interno con móviles (tabla 53464)');
+const SRC_DEUDA=['Ministerio de Hacienda · deuda viva de las entidades locales','https://www.hacienda.gob.es/es-ES/CDI/Paginas/SistemasFinanciacionDeuda/InformacionEELLs/DeudaViva.aspx'];
+const MES_CAP=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const sum12=a=>(a||[]).slice(-12).reduce((s,x)=>s+(x.v||0),0);
+const PAL=[COL.c1,COL.c4,COL.c3,COL.c5,COL.c6,COL.c2,'#5b8def','#34c3a0','#c49a2c','#b07cd8','#7d7d84'];
+
+/* --- Turismo: todos los turistas (móviles) y oferta reglada --- */
+function extraTurismo2(){
+  const T=DATA.turismo_moviles||{},I=T.internacional||{},N=T.nacional||{};
+  const it=I.total||[],nt=N.total||[];
+  let html='';
+  if(it.length||nt.length){
+    const k=[];
+    const li=last(it),pi=it.length>12?it[it.length-13]:null;
+    if(li){const[dt,dc]=deltaTxt(pi?pct(li.v,pi.v):null);k.push(kpi(fmt(li.v),'Turistas extranjeros · '+lblMes(li.t),dt,dc));}
+    const ln=last(nt),pn=nt.length>12?nt[nt.length-13]:null;
+    if(ln){const[dt,dc]=deltaTxt(pn?pct(ln.v,pn.v):null);k.push(kpi(fmt(ln.v),'Turistas españoles de otras provincias · '+lblMes(ln.t),dt,dc));}
+    if(it.length>=12)k.push(kpi(fmt(sum12(it)),'Turistas extranjeros · últimos 12 meses','',''));
+    html+='<div class="h2" style="margin-top:34px">Todos los turistas · medición con teléfonos móviles</div>'+
+     '<div class="pdesc">El INE cuenta, a partir de la posición de los móviles, a <b>todas</b> las personas que pasan al menos una noche en Marbella sin residir en ella (en hotel, apartamento, vivienda turística, casa propia o de amigos), no solo a las alojadas en hoteles. Es una estadística experimental.</div>'+
+     '<div class="kpis">'+k.join('')+'</div>'+
+     '<div class="grid">'+
+      card('c_tm_evol','Turistas al mes',geoTag('Marbella')+'Extranjeros y españoles residentes en otras provincias'+nota('Mensual. INE · medición del turismo con móviles. El dato de extranjeros se publica con más retraso que el nacional.'),'live',SRC_TMOV_INT,true)+
+      card('c_tm_paises','Principales países de origen',geoTag('Marbella')+'Turistas extranjeros en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 52048.'),'live',SRC_TMOV_INT)+
+      card('c_tm_ccaa','Turismo nacional por comunidad de origen',geoTag('Marbella')+'Turistas españoles en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 53464. No incluye a los residentes en la provincia de Málaga.'),'live',SRC_TMOV_NAC)+
+     '</div>';
+  }
+  const S=DATA.sima||{},pl=(S.plazas_turisticas||[]),vf=(S.vft||[]);
+  if(pl.length||vf.length){
+    const lv=last(vf),vv=lv?lv['Viviendas con fines turísticos']:null;
+    const lp=last(pl);const hot=lp?(lp['Hotel']||0)+(lp['Hotel-Apartamento']||0):null;
+    html+='<div class="h2" style="margin-top:34px">Oferta turística reglada</div>'+
+     '<div class="pdesc">Establecimientos inscritos en el Registro de Turismo de Andalucía.'+(Array.isArray(vv)&&hot?' En <b>'+lv.y+'</b> Marbella tenía <b>'+fmt(vv[0])+'</b> viviendas con fines turísticos con <b>'+fmt(vv[1])+'</b> plazas, frente a '+fmt(hot)+' plazas en hoteles y hoteles-apartamento.':'')+'</div>'+
+     '<div class="grid">'+
+      card('c_of_plazas','Plazas por tipo de alojamiento',geoTag('Marbella')+'Plazas regladas por año y tipo, incluidas las viviendas con fines turísticos (apilado)'+nota('Anual. IECA · Registro de Turismo de Andalucía. El último año es provisional.'),'stat',SRC_SIMA(117646),true)+
+      card('c_vft','Viviendas con fines turísticos',geoTag('Marbella')+'Viviendas inscritas y sus plazas'+nota('Anual. IECA · Registro de Turismo de Andalucía (consulta 117653).'),'stat',SRC_SIMA(117653),true)+
+     '</div>';
+  }
+  if(!html)return;
+  addBlock('turismo',html);
+  if(it.length||nt.length){
+    const mi=byT(it),mn=byT(nt);
+    const allT=[...new Set([...it.map(x=>x.t),...nt.map(x=>x.t)])].sort();
+    charts.tmevol=new Chart(c('c_tm_evol'),{type:'line',data:{labels:allT.map(lblMes),datasets:[ds('Extranjeros',allT.map(t=>mi[t]??null),COL.c4,true),ds('Españoles de otras provincias',allT.map(t=>mn[t]??null),COL.c1)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});
+    const P=Object.entries(I.paises||{}).map(([n,a])=>[n,sum12(a)]).sort((a,b)=>b[1]-a[1]).slice(0,12);
+    if(P.length)barCatH('c_tm_paises',P.map(x=>x[0]),P.map(x=>x[1]),P.map(()=>COL.c4),'turistas');
+    const C=Object.entries(N.origen||{}).map(([n,a])=>[n,sum12(a)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    if(C.length)barCatH('c_tm_ccaa',C.map(x=>x[0]),C.map(x=>x[1]),C.map(()=>COL.c1),'turistas');
+  }
+  if(pl.length||vf.length){
+    const yrs=[...new Set([...pl.map(x=>x.y),...vf.map(x=>x.y)])].sort();
+    const P=Object.fromEntries(pl.map(x=>[x.y,x])),V=Object.fromEntries(vf.map(x=>[x.y,x['Viviendas con fines turísticos']]));
+    const tipos=['Hotel','Hotel-Apartamento','Apartamentos turísticos','Hostal','Pensión'];
+    const sets=tipos.map((t,i)=>({label:t,data:yrs.map(y=>(P[y]||{})[t]??null),backgroundColor:hexA(PAL[i],.85),stack:'p'}));
+    sets.push({label:'Viviendas con fines turísticos',data:yrs.map(y=>Array.isArray(V[y])?V[y][1]:null),backgroundColor:hexA(COL.c6,.85),stack:'p'});
+    charts.ofpl=new Chart(c('c_of_plazas'),{type:'bar',data:{labels:yrs,datasets:sets},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
+    const vy=yrs.filter(y=>Array.isArray(V[y]));
+    if(vy.length)charts.vft=new Chart(c('c_vft'),{type:'bar',data:{labels:vy,datasets:[
+      {label:'Viviendas',data:vy.map(y=>V[y][0]),backgroundColor:hexA(COL.c6,.85),borderRadius:3,yAxisID:'y'},
+      {type:'line',label:'Plazas',data:vy.map(y=>V[y][1]),borderColor:COL.c1,backgroundColor:'transparent',borderWidth:2,pointRadius:2,tension:.25,yAxisID:'y1'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY(),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>abbr(v)}}}})});
+  }
+}
+
+/* --- Empresas: establecimientos por actividad (IECA) --- */
+function extraEmpresas(){
+  const E=((DATA.sima||{}).establecimientos)||[];if(!E.length)return;
+  const l=last(E);const cats=Object.entries(l).filter(([k,v])=>k!=='y'&&typeof v==='number'&&!/total/i.test(k)).sort((a,b)=>b[1]-a[1]);
+  if(!cats.length)return;
+  const tot=cats.reduce((s,x)=>s+x[1],0);
+  addBlock('empresas','<div class="h2" style="margin-top:34px">Establecimientos con actividad económica</div>'+
+   '<div class="pdesc">Locales donde se ejerce una actividad (una empresa puede tener varios). En <b>'+l.y+'</b> había <b>'+fmt(tot)+'</b> establecimientos en Marbella.</div>'+
+   '<div class="grid">'+
+    card('c_estab_act','Establecimientos por actividad',geoTag('Marbella')+'Último año, por sección de actividad'+nota('Anual. IECA · Directorio de Empresas y Establecimientos con Actividad Económica en Andalucía.'),'stat',SRC_SIMA(22591),true)+
+    card('c_estab_evo','Evolución de los establecimientos',geoTag('Marbella')+'Total por año'+nota('Anual. IECA · directorio de establecimientos.'),'stat',SRC_SIMA(22591),true)+
+   '</div>');
+  barCatH('c_estab_act',cats.map(x=>x[0]),cats.map(x=>x[1]),cats.map(()=>COL.c1),'establecimientos');
+  const ev=E.map(r=>({y:r.y,v:Object.entries(r).filter(([k,v])=>k!=='y'&&typeof v==='number'&&!/total/i.test(k)).reduce((s,x)=>s+x[1],0)}));
+  charts.estabevo=new Chart(c('c_estab_evo'),lineYear(ev.map(x=>x.y),[ds('Establecimientos',ev.map(x=>x.v),COL.c1,true)]));
+}
+
+/* --- Precios y consumo: pulso local de Marbella --- */
+function extraCoyuntura(){
+  const S=DATA.sima||{},MT=S.matriculaciones||[],VH=S.vehiculos||[],EL=S.electricidad||[],DV=((DATA.deuda||{}).serie)||[];
+  if(!MT.length&&!VH.length&&!EL.length&&!DV.length)return;
+  const pob=byY((DATA.demografia||{}).poblacion);
+  const k=[];
+  const lm=last(MT);if(lm){const t=MES_CAP.reduce((s,m)=>s+(lm[m]||0),0);k.push(kpi(fmt(t),'Vehículos matriculados · '+lm.y,'',''));}
+  const le=last(EL);if(le&&le.TOTAL)k.push(kpi(fmt(le.TOTAL/1000,0)+' GWh','Consumo eléctrico · '+le.y,'',''));
+  const ld=last(DV);if(ld){const p=pob[ld.y]||pob[ld.y+1];k.push(kpi(fmt(ld.v/1e6,1)+' M€','Deuda viva del Ayuntamiento · 31-12-'+ld.y,p?fmt(ld.v/p)+' € por habitante':'',''));}
+  addBlock('coyuntura','<div class="h2" style="margin-top:34px">Pulso local de Marbella</div>'+
+   '<div class="pdesc">Indicadores de actividad con dato propio del municipio: compra de vehículos, consumo de electricidad y endeudamiento del Ayuntamiento.</div>'+
+   '<div class="kpis">'+k.join('')+'</div>'+
+   '<div class="grid">'+
+    card('c_matric','Vehículos matriculados',geoTag('Marbella')+'Matriculaciones de cada mes'+nota('Mensual, publicado por años completos. IECA a partir de la DGT.'),'stat',SRC_SIMA(1274),true)+
+    card('c_elec','Consumo de electricidad por sector',geoTag('Marbella')+'MWh al año (apilado)'+nota('Anual. IECA, a partir de datos de la distribuidora (Endesa).'),'stat',SRC_SIMA(39837),true)+
+    card('c_vehic','Parque de vehículos',geoTag('Marbella')+'Turismos, motocicletas y furgonetas en circulación'+nota('Anual. IECA a partir de la DGT.'),'stat',SRC_SIMA(1231))+
+    card('c_deuda','Deuda viva del Ayuntamiento',geoTag('Ayuntamiento de Marbella')+'Millones de euros a 31 de diciembre y euros por habitante'+nota('Anual. Ministerio de Hacienda; el 31-12 del año N se publica a mediados de N+1.'),'stat',SRC_DEUDA)+
+   '</div>');
+  if(MT.length){const pts=[];MT.forEach(r=>MES_CAP.forEach((m,i)=>{if(r[m]!=null)pts.push({t:r.y+'-'+String(i+1).padStart(2,'0'),v:r[m]});}));
+    charts.matric=new Chart(c('c_matric'),{type:'bar',data:{labels:pts.map(x=>lblMes(x.t)),datasets:[{label:'Matriculaciones',data:pts.map(x=>x.v),backgroundColor:hexA(COL.c1,.8),borderRadius:2}]},
+      options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+  if(EL.length){const sec=['Sector residencial','Comercio_Servicios','Industria','Administración-Servicios públicos','Agricultura','Resto'];
+    const lbl={'Comercio_Servicios':'Comercio y servicios','Administración-Servicios públicos':'Administración y servicios públicos'};
+    charts.elec=new Chart(c('c_elec'),{type:'bar',data:{labels:EL.map(x=>x.y),datasets:sec.map((s,i)=>({label:lbl[s]||s,data:EL.map(x=>x[s]??null),backgroundColor:hexA(PAL[i],.85),stack:'e'}))},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});}
+  if(VH.length)charts.vehic=new Chart(c('c_vehic'),lineYear(VH.map(x=>x.y),[ds('Turismos',VH.map(x=>x.Turismos??null),COL.c1,true),ds('Motocicletas',VH.map(x=>x.Motocicletas??null),COL.c4),ds('Furgonetas',VH.map(x=>x.Furgonetas??null),COL.c3)]));
+  if(DV.length){charts.deuda=new Chart(c('c_deuda'),{type:'bar',data:{labels:DV.map(x=>x.y),datasets:[
+      {label:'Deuda viva (M€)',data:DV.map(x=>+(x.v/1e6).toFixed(1)),backgroundColor:hexA(COL.c2,.75),borderRadius:3,yAxisID:'y'},
+      {type:'line',label:'€ por habitante',data:DV.map(x=>{const p=pob[x.y]||pob[x.y+1];return p?Math.round(x.v/p):null;}),borderColor:COL.c5,backgroundColor:'transparent',borderWidth:2,pointRadius:2,yAxisID:'y1'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY(v=>v+' M€'),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>v+' €'}}}})});}
+}
+
+function EXTRA_ULT2(D){
+  const S=D.sima||{},T=D.turismo_moviles||{};
+  const ly=a=>{const x=last(a||[]);return x?x.y:null;},lt=a=>{const x=last(a||[]);return x?x.t:null;};
+  const A=y=>['anual',y],Mm=t=>['mes',t];
+  const ti=lt((T.internacional||{}).total),tn=lt((T.nacional||{}).total);
+  return {c_tm_evol:Mm([ti,tn].filter(Boolean).sort().pop()||null),c_tm_paises:Mm(ti),c_tm_ccaa:Mm(tn),
+    c_of_plazas:A(ly(S.plazas_turisticas)),c_vft:A(ly(S.vft)),c_estab_act:A(ly(S.establecimientos)),c_estab_evo:A(ly(S.establecimientos)),
+    c_matric:A(ly(S.matriculaciones)),c_elec:A(ly(S.electricidad)),c_vehic:A(ly(S.vehiculos)),c_deuda:A(ly((D.deuda||{}).serie))};
+}
+
 /* cada sección pinta lo suyo y después su ampliación con datos municipales */
 const both=(f,g)=>()=>{f();try{g();}catch(e){console.error(e);}};
-const BUILD={resumen:buildResumen,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),comparativa:buildComparativa,turismo:both(buildTurismo,extraTurismo),empresas:buildEmpresas,coyuntura:buildCoyuntura,renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
+const BUILD={resumen:buildResumen,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));

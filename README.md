@@ -9,7 +9,7 @@ muestra el último dato publicado, sin que nadie tenga que tocar nada.
 
 ```
 GitHub Actions (cron diario)
-   └─ fetch_data.py  ── descarga ──►  INE Tempus3 · IECA/BADEA · Argos (SAE) · SEPE · MIVAU
+   └─ fetch_data.py  ── descarga ──►  INE Tempus3 · IECA/BADEA · Argos (SAE) · SEPE · MIVAU · Hacienda
         └─ escribe  data/*.json
 GitHub Pages sirve  index.html + data/*.json   (mismo origen → sin problemas de CORS)
 ```
@@ -37,6 +37,11 @@ GitHub Pages sirve  index.html + data/*.json   (mismo origen → sin problemas d
 | Demografía | Nacimientos, defunciones y crecimiento vegetativo | IECA · SIMA | Anual |
 | Vivienda | Compraventas (nueva / segunda mano) y valor tasado €/m² **de Marbella** | Ministerio de Vivienda (MIVAU) | Trimestral |
 | Vivienda | Índice de precios del alquiler **de Marbella** | INE · IPVA | Anual |
+| Turismo | Todos los turistas (no solo hotel): extranjeros por país y españoles por comunidad de origen | INE · turismo medido con móviles (TMOV) | Mensual |
+| Turismo | Plazas regladas por tipo y viviendas con fines turísticos | IECA · Registro de Turismo de Andalucía | Anual |
+| Empresas | Establecimientos por actividad | IECA · directorio de establecimientos | Anual |
+| Actividad local | Matriculaciones, parque de vehículos y consumo eléctrico por sector | IECA · SIMA (DGT, Endesa) | Anual |
+| Hacienda local | Deuda viva del Ayuntamiento | Ministerio de Hacienda | Anual |
 | Turismo | Viajeros, pernoctaciones, ADR, RevPAR | INE · EOH | Mensual |
 | Tejido empresarial | Empresas activas (DIRCE) | INE | Anual |
 | Renta | Renta media por persona y hogar | INE · Atlas de renta | Anual |

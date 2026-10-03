@@ -12,6 +12,13 @@ on:
 permissions:
   contents: write               # necesario para commitear los datos actualizados
 
+# Una sola actualización a la vez. Si el SEPE tarda, la manual y la programada
+# llegaban a solaparse (3-10-2026) y la segunda fallaba al hacer push porque la
+# primera ya había subido sus datos. La que llega después espera su turno.
+concurrency:
+  group: actualizar-datos
+  cancel-in-progress: false
+
 jobs:
   actualizar:
     runs-on: ubuntu-latest
@@ -25,7 +32,7 @@ jobs:
           python-version: '3.12'
 
       - name: Instalar dependencias
-        run: pip install xlrd==2.0.1
+        run: pip install xlrd==2.0.1 openpyxl==3.1.5
 
       # continue-on-error: si una serie se ha quedado congelada, fetch_data.py
       # sale con código 2. Los datos son buenos y deben publicarse igualmente,
@@ -44,6 +51,9 @@ jobs:
             echo "Sin cambios en los datos: no hay nada que publicar."
           else
             git commit -m "Datos actualizados ($(date -u +%Y-%m-%d))"
+            # por si otra ejecución o un commit manual han entrado entretanto;
+            # en conflicto mandan los datos recién descargados
+            git pull --rebase -X theirs
             git push
           fi
 

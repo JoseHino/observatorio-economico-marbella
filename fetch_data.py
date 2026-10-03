@@ -29,8 +29,27 @@ CCAA  = "1"       # comunidad autónoma Andalucía
 BADEA_MARBELLA = "2980"
 UA = {"User-Agent": "Mozilla/5.0 (ObservatorioMarbella; +github-actions)"}
 
+# Servidores que en esta pasada no han llegado a contestar. El 3-10-2026 el SEPE dejó
+# de aceptar conexiones desde los runners de GitHub (en EE. UU.; desde España
+# respondía en 2 s): cada uno de sus ficheros agotaba 3 reintentos de hasta 180 s y la
+# ejecución se fue a 54 minutos para no traer nada. Ahora el primer fallo de conexión
+# marca el servidor como caído y el resto de peticiones a él se saltan al momento; lo
+# publicado se conserva (write/write_serie) y se vuelve a probar en la siguiente pasada.
+_CAIDOS = set()
+
+def _es_fallo_conexion(e):
+    """Timeouts y errores de red, no respuestas HTTP (un 404 es una respuesta)."""
+    import socket
+    if isinstance(e, urllib.error.HTTPError):
+        return False
+    return isinstance(e, (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError))
+
 def _get(url, timeout=120, retries=3, backoff=2.0):
     """GET con reintentos: tolera cortes de red transitorios (DNS, timeouts)."""
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc
+    if host in _CAIDOS:
+        raise ConnectionError(f"{host} no contesta en esta pasada (se omite)")
     last = None
     for intento in range(retries):
         try:
@@ -42,6 +61,9 @@ def _get(url, timeout=120, retries=3, backoff=2.0):
             if intento < retries - 1:
                 import time
                 time.sleep(backoff * (intento + 1))
+    if _es_fallo_conexion(last):
+        _CAIDOS.add(host)
+        print(f"    ✗ {host} no contesta ({last}): se omite el resto de sus peticiones")
     raise last
 
 def get_json(url):
@@ -1008,7 +1030,35 @@ SIMA_CONSULTAS = {
     "afiliados": "49401",   # Afiliaciones según municipio de TRABAJO, por nacionalidad (media anual)
     "mnp":       "22084",   # Nacimientos, defunciones y crecimiento vegetativo
 }
+# Indicadores de actividad local, todos con la misma forma (una categoría por fila):
+SIMA_GENERICAS = {
+    "matriculaciones": "1274",     # Vehículos matriculados por mes
+    "vehiculos":       "1231",     # Parque de vehículos por tipo
+    "electricidad":    "39837",    # Consumo de energía eléctrica por sectores (MWh)
+    "establecimientos":"22591",    # Establecimientos por actividad (CNAE 09)
+    "plazas_turisticas":"117646",  # Plazas en alojamientos turísticos por tipo (Registro de Turismo)
+    "vft":             "117653",   # Viviendas con fines turísticos: viviendas y plazas
+}
+SIMA_CONSULTAS.update(SIMA_GENERICAS)
 SIMA_DESDE = 2015
+
+def _sima_categorias(filas):
+    """{categoría: valor} (o lista si hay varias medidas) para una consulta genérica.
+
+    Se localiza la columna del año (código de 4 cifras); la categoría es la
+    dimensión inmediatamente anterior ('Hotel', 'Enero', 'Sector residencial'…) y
+    se ignora el estado Provisional/Definitivo. Los valores van detrás del año."""
+    rec = {}
+    for r in filas:
+        k = next((i for i, c in enumerate(r)
+                  if len(c.get("cod") or []) == 1 and str(c["cod"][0]).isdigit()
+                  and len(str(c["cod"][0])) == 4), None)
+        if not k or k < 2:
+            continue
+        cat = r[k - 1].get("des")
+        vals = [_sima_v(c) for c in r[k + 1:]]
+        rec[cat] = vals[0] if len(vals) == 1 else vals
+    return rec
 _SIMA_GRUPOS = {"UE (15)": "ue15", "Resto UE": "resto_ue", "Resto Europa": "resto_europa",
                 "África": "africa", "América latina": "america_latina",
                 "Resto América": "resto_america", "Resto del mundo": "resto_mundo"}
@@ -1069,6 +1119,8 @@ def _sima_anio(clave, filas):
             if k:
                 rec[k] = _sima_v(r[3])
         return rec
+    if clave in SIMA_GENERICAS:  # territorio | [estado] | categoría | año | valor(es)
+        return _sima_categorias(filas)
     if clave == "mnp":           # territorio | sexo | año | nacimientos | defunciones | crec. vegetativo
         for r in filas:
             if r[1].get("des") == "Ambos sexos":
@@ -1217,6 +1269,129 @@ def vivienda_marbella():
           f"valor tasado: {len(vt)} (último {vt[-1]['t'] if vt else '—'})")
     write("vivienda_marbella.json", data)
 
+# ------------------------------------- TURISMO MEDIDO CON MÓVILES (INE, op. TMOV)
+# Estadística experimental del INE a partir de la posición de los teléfonos móviles:
+# cuenta TODOS los turistas que pernoctan en Marbella (hotel, apartamento, vivienda
+# turística, casa propia o de amigos), no solo los de hotel como la EOH.
+#   · 52048: turistas extranjeros por municipio de destino y país de residencia
+#   · 53464: turistas españoles de otras provincias por CCAA de origen
+# Las tablas enteras superan el límite de la API ("restricciones de volumen"): hay
+# que filtrar por la variable municipio (19) = Marbella (valor 2822).
+TMOV_FILTRO = "tv=19:2822"
+TMOV_TOP = 20     # países con serie propia; el resto se suma en "Otros"
+
+def _tmov_series(tabla, idx_nombre, nult):
+    """{nombre de la categoría: [{t, v}]} para Marbella en una tabla TMOV.
+
+    La tabla de extranjeros (92 países) vuelve a chocar con el límite de volumen
+    por encima de ~36 meses aunque se filtre el municipio: se piden los últimos
+    meses y se funden con lo ya publicado (_tmov_funde) para no perder historia."""
+    out = {}
+    for s in get_json(f"{INE_TBL}{tabla}?{TMOV_FILTRO}&nult={nult}"):
+        partes = [p.strip() for p in s.get("Nombre", "").split(".") if p.strip()]
+        if len(partes) <= idx_nombre:
+            continue
+        pts = []
+        for d in s.get("Data", []):
+            if d.get("Valor") is None:
+                continue
+            y, m = ine_periodo(d["Anyo"], d.get("FK_Periodo"), d["Fecha"])
+            pts.append({"t": f"{y:04d}-{m:02d}", "v": round(d["Valor"])})
+        if pts:
+            out[partes[idx_nombre]] = sorted(pts, key=lambda x: x["t"])
+    return out
+
+def _tmov_funde(nuevo, viejo):
+    """Mezcla dos series [{t, v}]: manda lo recién bajado, se conserva lo antiguo."""
+    m = {p["t"]: p for p in (viejo or [])}
+    m.update({p["t"]: p for p in (nuevo or [])})
+    return [m[t] for t in sorted(m)]
+
+def turismo_moviles():
+    step("Turistas en Marbella medidos con móviles · INE TMOV (52048 extranjeros, 53464 nacionales)")
+    prev = _leer("turismo_moviles.json") or {}
+    data = {}
+    try:
+        ser = _tmov_series("52048", 1, 36)      # "Turistas. Reino Unido. Marbella. Dato base."
+        pi = prev.get("internacional") or {}
+        for n, pts in (pi.get("paises") or {}).items():
+            ser[n] = _tmov_funde(ser.get(n), pts)
+        total = _tmov_funde(ser.pop("Total", []), pi.get("total"))
+        def ult12(nombre):
+            return sum(p["v"] for p in ser[nombre][-12:])
+        top = sorted(ser, key=ult12, reverse=True)[:TMOV_TOP]
+        otros = {}
+        for nombre, pts in ser.items():
+            if nombre in top:
+                continue
+            for p in pts:
+                otros[p["t"]] = otros.get(p["t"], 0) + p["v"]
+        data["internacional"] = {
+            "total": total,
+            "paises": {n: ser[n] for n in top},
+            "otros": [{"t": t, "v": otros[t]} for t in sorted(otros)],
+        }
+    except Exception as e:
+        print(f"    ! internacional: {e}")
+        data["internacional"] = prev.get("internacional") or {}
+    try:
+        ser = _tmov_series("53464", 2, 120)     # "Dato base. Marbella. Andalucía. Turistas."
+        data["nacional"] = {"total": ser.pop("Total Nacional", []), "origen": ser}
+    except Exception as e:
+        print(f"    ! nacional: {e}")
+        data["nacional"] = prev.get("nacional") or {}
+    it, nt = (data["internacional"] or {}).get("total") or [], (data["nacional"] or {}).get("total") or []
+    print(f"    · internacional: {len(it)} meses (último {it[-1]['t'] if it else '—'}) · "
+          f"nacional: {len(nt)} meses (último {nt[-1]['t'] if nt else '—'})")
+    write("turismo_moviles.json", data)
+
+# ------------------------------------- DEUDA VIVA DEL AYUNTAMIENTO (Ministerio de Hacienda)
+# Excel anual por ayuntamiento a 31 de diciembre (miles de euros), desde 2021 en
+# este formato. Las URL cambian de patrón de un año a otro, así que se leen de la
+# página del Ministerio en vez de construirlas.
+HACIENDA = "https://www.hacienda.gob.es"
+DEUDA_PAGINA = HACIENDA + "/es-ES/CDI/Paginas/SistemasFinanciacionDeuda/InformacionEELLs/DeudaViva.aspx"
+
+def deuda_viva():
+    step("Deuda viva del Ayuntamiento · Ministerio de Hacienda")
+    import re, openpyxl
+    from urllib.parse import quote
+    prev = {r["y"]: r for r in ((_leer("deuda.json") or {}).get("serie") or []) if r.get("y")}
+    try:
+        html = _get(DEUDA_PAGINA, timeout=90).decode("utf-8", "ignore")
+    except Exception as e:
+        print(f"    ! página de Hacienda: {e}")
+        write("deuda.json", {"serie": [prev[y] for y in sorted(prev)]})
+        return
+    enlaces = {}
+    for href in re.findall(r'href="([^"]*deuda-viva-ayuntamientos-(\d{4})[^"]*\.xlsx)"', html, re.I):
+        enlaces[int(href[1])] = href[0]
+    serie = dict(prev)
+    for y, href in sorted(enlaces.items()):
+        if y in prev and y < max(enlaces):       # los años cerrados no cambian
+            continue
+        url = href if href.startswith("http") else HACIENDA + quote(href, safe="/%")
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(_get(url, timeout=120)), read_only=True, data_only=True)
+            ws = wb.worksheets[0]
+            for fila in ws.iter_rows(values_only=True):
+                txt = [str(x).strip() if x is not None else "" for x in fila]
+                # hay otro "Marbella" fuera de Málaga? no, pero se exige la provincia
+                if "Marbella" in txt and (PROV in txt or "29" in txt or "MALAGA" in txt):
+                    # el importe es la primera cifra DETRÁS del nombre (los códigos
+                    # de provincia y municipio van delante y en algún año son números)
+                    i = txt.index("Marbella")
+                    nums = [x for x in fila[i + 1:] if isinstance(x, (int, float))]
+                    if nums:
+                        serie[y] = {"y": y, "v": round(nums[0] * 1000)}   # miles € → €
+                    break
+        except Exception as e:
+            print(f"    · {y}: {e}")
+    s = [serie[y] for y in sorted(serie)]
+    print(f"    · {len(s)} años (último {s[-1]['y'] if s else '—'}: "
+          f"{round(s[-1]['v']/1e6, 1) if s else '—'} M€)")
+    write("deuda.json", {"serie": s})
+
 # ---------------------------------------------------------------- VIGILANTE DE FRESCURA
 # Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
 # obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
@@ -1248,6 +1423,11 @@ _FRESCURA_MAX = {
     "sima.json": 16,
     # vivienda_marbella.json: MIVAU trimestral, ~3 meses tras cerrar el trimestre
     "vivienda_marbella.json": 7,
+    # turismo_moviles.json: el INE publica el receptor (extranjeros) con ~10 meses de
+    # retraso y el interno con ~3; el tope del fichero cubre el más lento
+    "turismo_moviles.json": 14,
+    # deuda.json: Hacienda publica el 31-12 del año N a mediados de N+1
+    "deuda.json": 20,
 }
 
 # Excepciones POR SERIE dentro de un fichero. Hacen falta cuando en el mismo JSON
@@ -1272,7 +1452,8 @@ _MNP_IECA = 30
 _IPVA_INE = 38
 
 _FRESCURA_SERIE = {
-    "sima.json": {"mnp": _MNP_IECA},
+    # el directorio de establecimientos del IECA va un año por detrás del resto de SIMA
+    "sima.json": {"mnp": _MNP_IECA, "establecimientos": _MNP_IECA},
     "vivienda_marbella.json": {"alquiler.indice": _IPVA_INE, "alquiler.var_anual": _IPVA_INE},
     "turismo.json": {
         "vut.viviendas": _VUT_INE, "vut.plazas": _VUT_INE, "vut.pct_viviendas": _VUT_INE,
@@ -1408,7 +1589,8 @@ def main():
     errors = 0
     # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
     for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
-               afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella):
+               afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
+               turismo_moviles, deuda_viva):
         try:
             fn()
         except Exception as e:
@@ -1423,7 +1605,8 @@ def main():
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "fuentes": ["INE Tempus3", "IECA/BADEA (afiliación SS y SIMA)",
                     "Observatorio Argos (SAE)", "SEPE datos abiertos",
-                    "MIVAU (compraventas y valor tasado municipal)"],
+                    "MIVAU (compraventas y valor tasado municipal)",
+                    "INE TMOV (turismo medido con móviles)", "Ministerio de Hacienda (deuda viva)"],
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
         "frescura": frescura,
