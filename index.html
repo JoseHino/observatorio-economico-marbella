@@ -165,7 +165,9 @@ footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-si
 <a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/" target="_blank">IECA · BADEA</a> ·
 <a href="https://www.juntadeandalucia.es/servicioandaluzdeempleo/web/argos/web/es/ARGOS/Territorios/index.html" target="_blank">Observatorio Argos (SAE)</a> ·
 <a href="https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html" target="_blank">SEPE · datos abiertos</a> ·
-<a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323" target="_blank">IECA · Afiliación a la Seguridad Social</a>.<br>
+<a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323" target="_blank">IECA · Afiliación a la Seguridad Social</a> ·
+<a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/sima/ficha.htm?mun=29069" target="_blank">IECA · SIMA (fichas municipales)</a> ·
+<a href="https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=34000000" target="_blank">Ministerio de Vivienda · transacciones y valor tasado</a>.<br>
 El proceso de actualización (<code>fetch_data.py</code>) se ejecuta en GitHub Actions y vuelca los datos a <code>/data/*.json</code>, leídos desde el mismo origen. El paro y la contratación de Marbella se toman del Observatorio Argos del Servicio Andaluz de Empleo, que los publica el mismo día en que se anuncia el paro (coinciden con el SEPE, que los publica días después); del SEPE se toman el paro por edad y sector y los agregados de comparación. La comparativa territorial (Marbella · Málaga · Andalucía · España) se calcula agregando el mismo fichero municipal del SEPE, por lo que las cifras son plenamente comparables. La compraventa de vivienda, las hipotecas, el IPV y los índices de precios y consumo se ofrecen a nivel provincial (Málaga) o autonómico (Andalucía), su máxima desagregación oficial.
 </div></footer>
 
@@ -311,6 +313,7 @@ function CARD_ULT(){
     c_soc:M(socT), c_soc_saldo:M(socT),
     c_renta:AN(renY), c_renta_uc:AN(renY), c_pobreza:AN(renY),
     c_pob:AN(demY), c_nac:AN(demYatlas), c_edad:AN(demYatlas),
+    ...EXTRA_ULT(D),
     c_compraventa:M(cvT), c_ipv:TR(ipvT), c_ipv_var:TR(ipvT),
     c_hipo:M(hipT), c_hipo_imp:M(hipT),
     c_ipc_var:M(ipcT), c_ipc_idx:M(ipcT), c_icm_var:M(icmT), c_icm_idx:M(icmT),
@@ -333,7 +336,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -761,10 +764,10 @@ function buildDemografia(){
 function buildVivienda(){
   const el=document.getElementById('vivienda');
   el.innerHTML='<div class="h2">Vivienda y mercado inmobiliario</div>'+
-   '<div class="pdesc">Compraventa de viviendas y evolución de precios. La estadística oficial llega a nivel <b>provincial (Málaga)</b> y <b>autonómico (Andalucía)</b> — su máxima desagregación pública.</div>'+
-   '<div class="note">Nota: no existe estadística pública de compraventa ni de precio a nivel municipal; se muestra el ámbito provincial/autonómico como referencia del mercado en el que se inserta Marbella.</div>'+
+   '<div class="pdesc">Compraventas, valor de tasación y alquiler de Marbella y, debajo, el mercado provincial (Málaga) y autonómico (Andalucía) en el que se inserta, con las series del INE.</div>'+
+   '<div id="viv-mb"></div>'+
    '<div class="grid">'+
-    card('c_compraventa','Compraventa de viviendas',geoTag('Provincia de Málaga')+'Operaciones mensuales: nueva y de segunda mano'+nota('Mensual, últimos 12 años. INE · ETDP. No existe dato municipal; se muestra la provincia.'),'live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
+    card('c_compraventa','Compraventa de viviendas',geoTag('Provincia de Málaga')+'Operaciones mensuales: nueva y de segunda mano'+nota('Mensual, últimos 12 años. INE · ETDP. El INE no da el dato municipal; el de Marbella, trimestral, está arriba.'),'live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
     card('c_ipv','Precio de la vivienda · IPV',geoTag('Andalucía')+'Índice de Precios de Vivienda (base 2015=100), trimestral'+nota('Trimestral. INE · IPV. Máxima desagregación: autonómica.'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
     card('c_ipv_var','Variación anual del precio',geoTag('Andalucía')+'% de variación interanual del precio de la vivienda'+nota('Trimestral. INE · IPV.'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
    '</div>'+
@@ -816,7 +819,212 @@ function barCat(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{la
 function barCatH(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
 
 /* ---------- navegación ---------- */
-const BUILD={resumen:buildResumen,laboral:buildLaboral,afiliacion:buildAfiliacion,contratacion:buildContr,comparativa:buildComparativa,turismo:buildTurismo,empresas:buildEmpresas,coyuntura:buildCoyuntura,renta:buildRenta,demografia:buildDemografia,vivienda:buildVivienda};
+/* ================= AMPLIACIÓN · DATOS ESPECÍFICOS DE MARBELLA =================
+   Españoles / extranjeros (población, migraciones, paro, contratos, afiliación),
+   turismo por residencia del viajero y vivienda municipal (MIVAU + alquiler INE).
+   Cada bloque se añade al final de su sección; si falta el dato, no se pinta. */
+const SRC_SIMA=c=>['IECA · SIMA, fichas municipales (consulta '+c+')','https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/operaciones/consulta/anual/'+c];
+const SRC_MIVAU_TR=['MIVAU · transacciones inmobiliarias por municipio','https://apps.fomento.gob.es/BoletinOnline2/?nivel=2&orden=34000000'];
+const SRC_MIVAU_VT=['MIVAU · valor tasado de la vivienda por municipio','https://apps.fomento.gob.es/BoletinOnline2/sedal/35103500.XLS'];
+const lblTrim=t=>{const[a,m]=t.split('-');return (+m/3)+'T '+a.slice(2);};
+const byY=a=>Object.fromEntries((a||[]).map(x=>[x.y,x.v]));
+const byT=a=>Object.fromEntries((a||[]).map(x=>[x.t,x.v]));
+function addBlock(id,html){const el=document.getElementById(id);if(el)el.insertAdjacentHTML('beforeend',html);}
+const stackNac=(labels,a,b,la,lb)=>({type:'bar',data:{labels,datasets:[
+  {label:la,data:a,backgroundColor:hexA(COL.c1,.85),stack:'s'},
+  {label:lb,data:b,backgroundColor:hexA(COL.c4,.85),stack:'s'}]},
+  options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
+const lineYear=(labels,sets,cb)=>({type:'line',data:{labels,datasets:sets},
+  options:baseOpts({plugins:{legend:{display:sets.length>1,position:'bottom'}},scales:{x:{grid:{display:false}},y:axY(cb)}})});
+
+/* --- Empleo: paro por nacionalidad (media anual, IECA) --- */
+function extraLaboral(){
+  const p=((DATA.sima||{}).paro||[]).filter(x=>x.total!=null);if(!p.length)return;
+  const l=last(p),pe=l.total?l.extranjera/l.total*100:null;
+  addBlock('laboral','<div class="h2" style="margin-top:34px">Paro de españoles y extranjeros</div>'+
+   '<div class="pdesc">Media anual del paro registrado en Marbella según la nacionalidad de la persona demandante. En <b>'+l.y+'</b>, <b>'+fmt(l.extranjera)+'</b> de los '+fmt(l.total)+' parados eran extranjeros (el '+fmt(pe,1)+' %).</div>'+
+   '<div class="grid">'+
+    card('c_paro_nac','Paro registrado por nacionalidad',geoTag('Marbella')+'Media de los doce meses, españoles y extranjeros (apilado)'+nota('Anual. IECA · SIMA; el año se cierra en el primer trimestre del siguiente.'),'stat',SRC_SIMA(37028),true)+
+    card('c_paro_orig','Paro extranjero por zona de origen',geoTag('Marbella')+'Media anual del último año, por nacionalidad agrupada'+nota('Anual. IECA · SIMA.'),'stat',SRC_SIMA(37028))+
+    card('c_paro_pctext','Peso de los extranjeros en el paro',geoTag('Marbella')+'% de parados extranjeros sobre el total'+nota('Anual. Calculado con la media anual.'),'stat',SRC_SIMA(37028))+
+   '</div>');
+  charts.paronac=new Chart(c('c_paro_nac'),stackNac(p.map(x=>x.y),p.map(x=>x.espanola),p.map(x=>x.extranjera),'Española','Extranjera'));
+  const g=l.grupos||{},G=[['ue15','UE (15)'],['resto_ue','Resto UE'],['resto_europa','Resto de Europa'],['africa','África'],['america_latina','América Latina'],['resto_mundo','Resto del mundo'],['resto_america','Resto de América']]
+    .filter(([k])=>g[k]!=null).sort((a,b)=>g[b[0]]-g[a[0]]);
+  barCatH('c_paro_orig',G.map(x=>x[1]),G.map(x=>g[x[0]]),G.map(()=>COL.c4),'parados');
+  charts.paropct=new Chart(c('c_paro_pctext'),lineYear(p.map(x=>x.y),[ds('% extranjeros',p.map(x=>x.total?+(x.extranjera/x.total*100).toFixed(1):null),COL.c4,true)],v=>v+'%'));
+}
+
+/* --- Afiliación: por nacionalidad, lugar de trabajo (IECA) --- */
+function extraAfiliacion(){
+  const a=((DATA.sima||{}).afiliados||[]).filter(x=>x.total!=null);if(!a.length)return;
+  const l=last(a);
+  addBlock('afiliacion','<div class="h2" style="margin-top:34px">Trabajadores españoles y extranjeros</div>'+
+   '<div class="pdesc">Afiliaciones con <b>lugar de trabajo en Marbella</b> (no de residencia, a diferencia de lo anterior) según nacionalidad. En <b>'+l.y+'</b>, '+fmt(l.extranjera)+' de '+fmt(l.total)+' afiliaciones correspondían a extranjeros (el '+fmt(l.extranjera/l.total*100,1)+' %).</div>'+
+   '<div class="grid">'+
+    card('c_afi_nac','Afiliación por nacionalidad',geoTag('Marbella · lugar de trabajo')+'Media anual de afiliaciones, españoles y extranjeros (apilado)'+nota('Anual (media de los doce meses), desde 2022. IECA · SIMA. La suma puede no dar el total: hay registros sin nacionalidad.'),'stat',SRC_SIMA(49401),true)+
+    card('c_afi_pctext','Peso de los extranjeros en el empleo',geoTag('Marbella · lugar de trabajo')+'% de afiliaciones de extranjeros sobre el total'+nota('Anual. IECA · SIMA.'),'stat',SRC_SIMA(49401),true)+
+   '</div>');
+  charts.afinac=new Chart(c('c_afi_nac'),stackNac(a.map(x=>x.y),a.map(x=>x.espanola),a.map(x=>x.extranjera),'España','Extranjero'));
+  charts.afipct=new Chart(c('c_afi_pctext'),lineYear(a.map(x=>x.y),[ds('% extranjeros',a.map(x=>x.total?+(x.extranjera/x.total*100).toFixed(1):null),COL.c4,true)],v=>v+'%'));
+}
+
+/* --- Contratación: por nacionalidad (IECA) --- */
+function extraContr(){
+  const s=((DATA.sima||{}).contratos||[]).filter(x=>x.total!=null);if(!s.length)return;
+  const l=last(s);
+  addBlock('contratacion','<div class="h2" style="margin-top:34px">Contratos a españoles y extranjeros</div>'+
+   '<div class="pdesc">Contratos registrados en Marbella cada año según la nacionalidad de la persona contratada. En <b>'+l.y+'</b>, '+fmt(l.extranjera)+' de '+fmt(l.total)+' contratos se firmaron con extranjeros (el '+fmt(l.extranjera/l.total*100,1)+' %).</div>'+
+   '<div class="grid">'+
+    card('c_contr_nac','Contratos por nacionalidad',geoTag('Marbella')+'Total anual, españoles y extranjeros (apilado)'+nota('Anual. IECA · SIMA.'),'stat',SRC_SIMA(37138),true)+
+   '</div>');
+  charts.contrnac=new Chart(c('c_contr_nac'),stackNac(s.map(x=>x.y),s.map(x=>x.espanola),s.map(x=>x.extranjera),'Española','Extranjera'));
+}
+
+/* --- Turismo: residentes en España vs. en el extranjero (INE EOH) --- */
+function extraTurismo(){
+  const t=(DATA.turismo&&DATA.turismo.hoteles)||{};
+  const ve=tail(t.viajeros_esp,60);if(!ve.length||!(t.viajeros_ext||[]).length)return;
+  const mx=byT(t.viajeros_ext),pe=byT(t.pernoct_esp),px=byT(t.pernoct_ext);
+  const l=last(ve),lx=mx[l.t],sh=lx!=null?lx/(lx+l.v)*100:null;
+  addBlock('turismo','<div class="h2" style="margin-top:34px">Turismo nacional e internacional</div>'+
+   '<div class="pdesc">Viajeros alojados en los hoteles de Marbella según su <b>país de residencia</b>. En <b>'+lblMes(l.t)+'</b>, el '+fmt(sh,1)+' % de los viajeros residían en el extranjero.</div>'+
+   '<div class="grid">'+
+    card('c_tur_res','Viajeros por lugar de residencia',geoTag('Marbella')+'Residentes en España y en el extranjero, últimos cinco años (apilado)'+nota('Mensual. INE · EOH, ~1 mes de desfase.'),'live',ineSerie('EOT2760','EOH viajeros residentes en el extranjero'),true)+
+    card('c_tur_pctext','Peso del mercado internacional',geoTag('Marbella')+'% de viajeros y de pernoctaciones de residentes en el extranjero'+nota('Mensual. INE · EOH.'),'live',ineSerie('EOT2762','EOH pernoctaciones residentes en el extranjero'),true)+
+   '</div>');
+  const L=ve.map(x=>lblMes(x.t));
+  charts.turres=new Chart(c('c_tur_res'),{type:'bar',data:{labels:L,datasets:[
+    {label:'Residentes en España',data:ve.map(x=>x.v),backgroundColor:hexA(COL.c1,.85),stack:'v'},
+    {label:'Residentes en el extranjero',data:ve.map(x=>mx[x.t]??null),backgroundColor:hexA(COL.c4,.85),stack:'v'}]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},axMes),y:Object.assign({stacked:true},axY())}})});
+  const pv=ve.map(x=>mx[x.t]!=null?+(mx[x.t]/(mx[x.t]+x.v)*100).toFixed(1):null);
+  const pp=ve.map(x=>(px[x.t]!=null&&pe[x.t]!=null)?+(px[x.t]/(px[x.t]+pe[x.t])*100).toFixed(1):null);
+  charts.turpct=new Chart(c('c_tur_pctext'),{type:'line',data:{labels:L,datasets:[ds('% viajeros extranjeros',pv,COL.c4,true),ds('% pernoctaciones extranjeros',pp,COL.c5)]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})});
+}
+
+/* --- Demografía: residentes por nacionalidad/nacimiento/edad, migraciones, natalidad --- */
+function extraDemografia(){
+  const d=DATA.demografia||{},R=d.residentes||{},M=d.migraciones||{},N=(((DATA.sima||{}).mnp)||[]).filter(x=>x.nacimientos!=null);
+  const ne=R.nac_espanola||[],nx=R.nac_extranjera||[],se=M.saldo_exterior||[];
+  let html='';
+  if(ne.length&&nx.length){
+    const l=last(nx),te=byY(ne)[l.y],tot=te!=null?te+l.v:null,nb=byY(R.nacidos_extranjero)[l.y];
+    const prev=nx.length>1?nx[nx.length-2]:null;const[dt]=deltaTxt(prev?pct(l.v,prev.v):null);
+    html+='<div class="h2" style="margin-top:34px">Españoles y extranjeros</div>'+
+     '<div class="pdesc">Población residente a 1 de enero según la Estadística Continua de Población del INE, con unos nueve meses de desfase (el Atlas va dos años por detrás).</div>'+
+     '<div class="kpis">'+kpi(fmt(l.v),'Residentes extranjeros · 1 ene '+l.y,dt,'')+
+       (tot?kpi(fmt(l.v/tot*100,1)+' %','Peso de la población extranjera · '+l.y,'',''):'')+
+       (nb!=null&&tot?kpi(fmt(nb/tot*100,1)+' %','Nacidos fuera de España · '+l.y,'',''):'')+'</div>'+
+     '<div class="grid">'+
+      card('c_res_nac','Población por nacionalidad',geoTag('Marbella')+'Residentes de nacionalidad española y extranjera a 1 de enero (apilado)'+nota('Anual. INE · Estadística Continua de Población (tabla 79544).'),'stat',ineTbl(79544,'ECP · nacionalidad (tabla 79544)'),true)+
+      card('c_res_nacim','Por lugar de nacimiento',geoTag('Marbella')+'Nacidos en España y en el extranjero'+nota('Anual. INE · ECP (tabla 79545). Incluye a los españoles nacidos fuera.'),'stat',ineTbl(79545,'ECP · lugar de nacimiento (tabla 79545)'))+
+      card('c_res_edad','Población por grupos de edad',geoTag('Marbella')+'Residentes a 1 de enero del último año'+nota('Anual. INE · ECP (tabla 79543).'),'stat',ineTbl(79543,'ECP · edad (tabla 79543)'))+
+     '</div>';
+  }
+  if(se.length){
+    const l=last(se),si=byY(M.saldo_interior)[l.y];
+    html+='<div class="h2" style="margin-top:34px">Migraciones</div>'+
+     '<div class="pdesc">Altas y bajas por cambio de residencia. En <b>'+l.y+'</b> Marbella ganó <b>'+fmt(l.v)+'</b> residentes en su intercambio con el extranjero'+(si==null?'':(si<0?' y perdió <b>'+fmt(-si)+'</b>':' y ganó <b>'+fmt(si)+'</b>')+' en el intercambio con otros municipios españoles')+'.</div>'+
+     '<div class="grid">'+
+      card('c_mig_saldo','Saldo migratorio',geoTag('Marbella')+'Saldo con el extranjero y con el resto de España, por año'+nota('Anual. INE · Estadística de Migraciones y Cambios de Residencia; el año N se publica a mediados de N+2.'),'stat',ineTbl(69767,'EMCR · saldos (tabla 69767)'),true)+
+      card('c_mig_ext','Llegadas desde el extranjero y salidas hacia él',geoTag('Marbella')+'Inmigraciones procedentes del extranjero y emigraciones a él'+nota('Anual. INE · EMCR (tablas 69696 y 69711).'),'stat',ineTbl(69696,'EMCR · inmigraciones del extranjero'))+
+      card('c_mig_int','Cambios con otros municipios, por nacionalidad',geoTag('Marbella')+'Llegadas (arriba) y salidas (abajo) con el resto de España'+nota('Anual. INE · EMCR (tablas 69743 y 69745).'),'stat',ineTbl(69743,'EMCR · migraciones interiores'))+
+     '</div>';
+  }
+  if(N.length){const l=last(N);
+    html+='<div class="h2" style="margin-top:34px">Nacimientos y defunciones</div>'+
+     '<div class="pdesc">Movimiento natural de la población residente. En <b>'+l.y+'</b>: '+fmt(l.nacimientos)+' nacimientos y '+fmt(l.defunciones)+' defunciones (crecimiento vegetativo de '+fmt(l.crecimiento)+').</div>'+
+     '<div class="grid">'+card('c_mnp','Nacimientos, defunciones y crecimiento vegetativo',geoTag('Marbella')+'Por residencia de la madre o de la persona fallecida'+nota('Anual. IECA · Movimiento Natural de la Población.'),'stat',SRC_SIMA(22084),true)+'</div>';
+  }
+  if(!html)return;
+  addBlock('demografia',html);
+  if(ne.length&&nx.length){const mx=byY(nx);
+    charts.resnac=new Chart(c('c_res_nac'),stackNac(ne.map(x=>x.y),ne.map(x=>x.v),ne.map(x=>mx[x.y]??null),'Española','Extranjera'));
+    const be=R.nacidos_espana||[],bx=byY(R.nacidos_extranjero);
+    if(be.length)charts.resnacim=new Chart(c('c_res_nacim'),lineYear(be.map(x=>x.y),[ds('Nacidos en España',be.map(x=>x.v),COL.c1,true),ds('Nacidos en el extranjero',be.map(x=>bx[x.y]??null),COL.c4,true)]));
+    const E=[['edad_0_15','0-15'],['edad_16_24','16-24'],['edad_25_44','25-44'],['edad_45_64','45-64'],['edad_65','65 y más']].map(([k,n])=>[n,last(R[k]||[])]).filter(x=>x[1]);
+    if(E.length)barCat('c_res_edad',E.map(x=>x[0]),E.map(x=>x[1].v),[COL.c4,COL.c3,COL.c1,COL.c5,COL.c6],'personas');
+  }
+  if(se.length){const si=byY(M.saldo_interior);
+    charts.migsaldo=new Chart(c('c_mig_saldo'),{type:'bar',data:{labels:se.map(x=>x.y),datasets:[
+      {label:'Con el extranjero',data:se.map(x=>x.v),backgroundColor:hexA(COL.c4,.85),borderRadius:3},
+      {label:'Con el resto de España',data:se.map(x=>si[x.y]??null),backgroundColor:hexA(COL.c6,.85),borderRadius:3}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY()}})});
+    const ie=M.inmig_extranjero||[],ee=byY(M.emig_extranjero);
+    if(ie.length)charts.migext=new Chart(c('c_mig_ext'),lineYear(ie.map(x=>x.y),[ds('Llegadas del extranjero',ie.map(x=>x.v),COL.c4,true),ds('Salidas al extranjero',ie.map(x=>ee[x.y]??null),COL.c2)]));
+    const ii=M.inter_in_esp||[],ix=byY(M.inter_in_ext),oe=byY(M.inter_out_esp),ox=byY(M.inter_out_ext);
+    if(ii.length)charts.migint=new Chart(c('c_mig_int'),{type:'bar',data:{labels:ii.map(x=>x.y),datasets:[
+      {label:'Llegan españoles',data:ii.map(x=>x.v),backgroundColor:hexA(COL.c1,.85),stack:'s'},
+      {label:'Llegan extranjeros',data:ii.map(x=>ix[x.y]??null),backgroundColor:hexA(COL.c4,.85),stack:'s'},
+      {label:'Se van españoles',data:ii.map(x=>oe[x.y]!=null?-oe[x.y]:null),backgroundColor:hexA(COL.c1,.4),stack:'s'},
+      {label:'Se van extranjeros',data:ii.map(x=>ox[x.y]!=null?-ox[x.y]:null),backgroundColor:hexA(COL.c4,.4),stack:'s'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt(Math.abs(x.parsed.y))}}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY(v=>abbr(Math.abs(v))))}})});
+  }
+  if(N.length){
+    charts.mnp=new Chart(c('c_mnp'),{type:'bar',data:{labels:N.map(x=>x.y),datasets:[
+      {type:'line',label:'Nacimientos',data:N.map(x=>x.nacimientos),borderColor:COL.c4,backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:.25},
+      {type:'line',label:'Defunciones',data:N.map(x=>x.defunciones),borderColor:COL.c2,backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:.25},
+      {label:'Crecimiento vegetativo',data:N.map(x=>x.crecimiento),backgroundColor:N.map(x=>x.crecimiento>=0?hexA(COL.c4,.5):hexA(COL.c2,.5)),borderRadius:3}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY()}})});
+  }
+}
+
+/* --- Vivienda en Marbella (MIVAU + IPVA): se pinta en #viv-mb, antes del contexto provincial --- */
+function extraVivienda(){
+  const el=document.getElementById('viv-mb');if(!el)return;
+  const V=DATA.vivienda_marbella||{},cv=V.compraventas||{},tot=tail(cv.total,48),VT=V.valor_tasado||{},vt=VT.total||[],al=V.alquiler||{};
+  if(!tot.length&&!vt.length)return;
+  const k=[];
+  const ft=cv.total||[],lt=last(ft),pt=ft.length>4?ft[ft.length-5]:null;
+  if(lt){const[dt,dc]=deltaTxt(pt?pct(lt.v,pt.v):null);k.push(kpi(fmt(lt.v),'Compraventas de vivienda · '+lblTrim(lt.t),dt,dc));}
+  const lv=last(vt),pv=vt.length>4?vt[vt.length-5]:null;
+  if(lv){const[dt]=deltaTxt(pv?pct(lv.v,pv.v):null);k.push(kpi(fmt(lv.v)+' €/m²','Valor tasado de la vivienda libre · '+lblTrim(lv.t),dt,''));}
+  const la=last(al.var_anual||[]);
+  if(la)k.push(kpi((la.v>0?'+':'')+fmt(la.v,1)+' %','Variación del precio del alquiler · '+la.y,'',''));
+  el.innerHTML='<div class="h2" style="margin-top:8px">Marbella</div>'+
+   '<div class="pdesc">Mercado de vivienda del propio municipio: compraventas ante notario y valor de tasación del Ministerio de Vivienda (trimestral) y el índice de precios del alquiler del INE (anual).</div>'+
+   '<div class="kpis">'+k.join('')+'</div>'+
+   '<div class="grid">'+
+    card('c_mb_cv','Compraventas de vivienda',geoTag('Marbella')+'Transacciones por trimestre, nueva y de segunda mano (apilado), últimos doce años'+nota('Trimestral desde 2004. MIVAU, con datos del Consejo General del Notariado. El último trimestre es provisional.'),'live',SRC_MIVAU_TR,true)+
+    card('c_mb_vt','Valor tasado de la vivienda libre',geoTag('Marbella')+'€/m², total y según antigüedad de la vivienda'+nota('Trimestral. MIVAU · municipios de más de 25.000 habitantes.'),'live',SRC_MIVAU_VT,true)+
+    card('c_mb_alq','Precio del alquiler',geoTag('Marbella')+'Índice de precios de vivienda en alquiler (2015=100) y su variación anual'+nota('Anual. INE · IPVA (tabla 59060), a partir de datos fiscales; el año N se publica a finales de N+2.'),'stat',ineTbl(59060,'IPVA · municipios (tabla 59060)'),true)+
+   '</div>'+
+   '<div class="h2" style="margin-top:34px">Contexto provincial y autonómico</div>';
+  if(tot.length){const nu=byT(cv.nueva),sm=byT(cv.segunda_mano);
+    charts.mbcv=new Chart(c('c_mb_cv'),{type:'bar',data:{labels:tot.map(x=>lblTrim(x.t)),datasets:[
+      {label:'Segunda mano',data:tot.map(x=>sm[x.t]??null),backgroundColor:hexA(COL.c4,.85),stack:'t'},
+      {label:'Nueva',data:tot.map(x=>nu[x.t]??null),backgroundColor:hexA(COL.c3,.85),stack:'t'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},axMes),y:Object.assign({stacked:true},axY())}})});}
+  if(vt.length){const h5=byT(VT.hasta5),m5=byT(VT.mas5);
+    charts.mbvt=new Chart(c('c_mb_vt'),{type:'line',data:{labels:vt.map(x=>lblTrim(x.t)),datasets:[
+      ds('Total',vt.map(x=>x.v),COL.c1,true),ds('Hasta 5 años',vt.map(x=>h5[x.t]??null),COL.c3),ds('Más de 5 años',vt.map(x=>m5[x.t]??null),COL.c4)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v)+' €')}})});}
+  const ai=al.indice||[];
+  if(ai.length){const av=byY(al.var_anual);
+    charts.mbalq=new Chart(c('c_mb_alq'),{type:'bar',data:{labels:ai.map(x=>x.y),datasets:[
+      {type:'line',label:'Índice (2015=100)',data:ai.map(x=>x.v),borderColor:COL.c1,backgroundColor:'transparent',borderWidth:2,pointRadius:2,tension:.25,yAxisID:'y'},
+      {label:'% variación anual',data:ai.map(x=>av[x.y]??null),backgroundColor:hexA(COL.c4,.6),borderRadius:3,yAxisID:'y1'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY(v=>fmt(v,0)),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>v+'%'}}}})});}
+}
+
+/* último periodo de las gráficas de la ampliación municipal */
+function EXTRA_ULT(D){
+  const S=D.sima||{},R=((D.demografia||{}).residentes)||{},M=((D.demografia||{}).migraciones)||{},H=((D.turismo||{}).hoteles)||{},VM=D.vivienda_marbella||{};
+  const ly=a=>{const x=last(a||[]);return x?x.y:null;},lt=a=>{const x=last(a||[]);return x?x.t:null;};
+  const A=y=>['anual',y],Mm=t=>['mes',t],T=t=>['trim',t];
+  return {c_paro_nac:A(ly(S.paro)),c_paro_orig:A(ly(S.paro)),c_paro_pctext:A(ly(S.paro)),
+    c_afi_nac:A(ly(S.afiliados)),c_afi_pctext:A(ly(S.afiliados)),c_contr_nac:A(ly(S.contratos)),c_mnp:A(ly(S.mnp)),
+    c_res_nac:A(ly(R.nac_extranjera)),c_res_nacim:A(ly(R.nacidos_extranjero)),c_res_edad:A(ly(R.edad_65)),
+    c_mig_saldo:A(ly(M.saldo_exterior)),c_mig_ext:A(ly(M.inmig_extranjero)),c_mig_int:A(ly(M.inter_in_esp)),
+    c_tur_res:Mm(lt(H.viajeros_ext)),c_tur_pctext:Mm(lt(H.viajeros_ext)),
+    c_mb_cv:T(lt((VM.compraventas||{}).total)),c_mb_vt:T(lt((VM.valor_tasado||{}).total)),c_mb_alq:A(ly((VM.alquiler||{}).indice))};
+}
+
+/* cada sección pinta lo suyo y después su ampliación con datos municipales */
+const both=(f,g)=>()=>{f();try{g();}catch(e){console.error(e);}};
+const BUILD={resumen:buildResumen,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),comparativa:buildComparativa,turismo:both(buildTurismo,extraTurismo),empresas:buildEmpresas,coyuntura:buildCoyuntura,renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));

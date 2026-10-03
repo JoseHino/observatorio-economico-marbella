@@ -223,6 +223,11 @@ def turismo():
         "personal":       "EOT3296",
         "establecimientos":"EOT3008",
         "plazas":         "EOT3080",
+        # por lugar de residencia del viajero (tabla 2078): mercado nacional / internacional
+        "viajeros_esp":   "EOT2759",
+        "viajeros_ext":   "EOT2760",
+        "pernoct_esp":    "EOT2761",
+        "pernoct_ext":    "EOT2762",
     }
     apart = {                     # Apartamentos turísticos (EOAP) — Marbella
         "viajeros":       "EOT41395",
@@ -302,6 +307,31 @@ def demografia():
         "tamano_hogar":     serie_anual_from(s, "tamaño medio del hogar"),
         "pct_unipersonales":serie_anual_from(s, "hogares unipersonales"),
     }
+    # Estadística Continua de Población (op. ECP, tablas 79543-79545): población
+    # residente a 1 de enero por nacionalidad, lugar de nacimiento y grupo de edad.
+    # Municipal y con solo ~9 meses de desfase: da el dato de extranjeros dos años
+    # antes que el Atlas (que se queda para la serie larga del % de españoles).
+    ecp = {
+        "nac_espanola":   "ECP357741", "nac_extranjera":  "ECP357740",
+        "ext_hombres":    "ECP357737", "ext_mujeres":     "ECP357734",
+        "nacidos_espana": "ECP358497", "nacidos_extranjero": "ECP358496",
+        "edad_0_15":  "ECP356535", "edad_16_24": "ECP356534", "edad_25_44": "ECP356533",
+        "edad_45_64": "ECP356532", "edad_65":    "ECP356531",
+    }
+    data["residentes"] = {k: ine_anual(c) for k, c in ecp.items()}
+    # Estadística de Migraciones y Cambios de Residencia (op. EMCR): anual, municipal.
+    emcr = {
+        "inmig_extranjero": "EM1827059",   # llegadas desde el extranjero (69696)
+        "emig_extranjero":  "EM1905260",   # salidas al extranjero (69711)
+        "saldo_total":      "EM2363872",   # saldos (69767)
+        "saldo_exterior":   "EM2363873",
+        "saldo_interior":   "EM2363874",
+        "inter_in_esp":     "EM1970514",   # llegadas desde otros municipios (69743)
+        "inter_in_ext":     "EM1970517",
+        "inter_out_esp":    "EM2117826",   # salidas a otros municipios (69745)
+        "inter_out_ext":    "EM2117829",
+    }
+    data["migraciones"] = {k: ine_anual(c) for k, c in emcr.items()}
     write("demografia.json", data)
 
 # ---------------------------------------------------------------- EMPRESAS
@@ -964,6 +994,229 @@ def _afiliacion_badea():
                       "agregados de la provincia de Málaga y de Andalucía para comparar")
     write("afiliacion.json", data)
 
+# ------------------------------------- SIMA (IECA): empleo por nacionalidad + natalidad
+# Fichas municipales del IECA (operación b3_151, "Andalucía pueblo a pueblo"). Dan para
+# Marbella lo que ninguna otra fuente oficial desagrega por municipio: paro, contratos
+# y afiliación separando españoles y extranjeros, y el movimiento natural.
+#
+# La API solo filtra por periodo, no por territorio: cada petición trae TODOS los
+# municipios andaluces de un año (hasta ~5 MB en el paro). Por eso se descarga el
+# histórico una vez y después solo se piden los años que aún no están publicados.
+SIMA_CONSULTAS = {
+    "paro":      "37028",   # Paro registrado por nacionalidad y sexo (media anual)
+    "contratos": "37138",   # Contratos registrados por nacionalidad y sexo (anual)
+    "afiliados": "49401",   # Afiliaciones según municipio de TRABAJO, por nacionalidad (media anual)
+    "mnp":       "22084",   # Nacimientos, defunciones y crecimiento vegetativo
+}
+SIMA_DESDE = 2015
+_SIMA_GRUPOS = {"UE (15)": "ue15", "Resto UE": "resto_ue", "Resto Europa": "resto_europa",
+                "África": "africa", "América latina": "america_latina",
+                "Resto América": "resto_america", "Resto del mundo": "resto_mundo"}
+
+def _sima_anios(cid):
+    """{año: idNodo} de la dimensión temporal de una consulta SIMA."""
+    j = get_json(f"{BADEA_REST}/jerarquia/2?consultaId={cid}&alias=D_TEMPORAL_0")
+    out = {}
+    def flat(n):
+        for x in (n if isinstance(n, list) else [n]):
+            c = str(x.get("cod") or "")
+            if c.isdigit() and len(c) == 4:
+                out[int(c)] = x.get("id")
+            for ch in (x.get("children") or []):
+                flat(ch)
+    flat(j.get("data") or j)
+    return out
+
+def _sima_filas_marbella(cid, nodo):
+    """Filas de Marbella de una consulta SIMA para un año (lista vacía si no hay)."""
+    j = get_json(f"{BADEA_REST}/consulta/{cid}?D_TEMPORAL_0={nodo}")
+    return [r for r in j.get("data", [])
+            if (r[0].get("cod") or [""])[-1] == MUN]
+
+def _sima_v(cell):
+    try:
+        return round(float(cell.get("val")))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+def _sima_anio(clave, filas):
+    """Convierte las filas de Marbella de un año en un registro {y, ...}."""
+    if clave == "paro":          # territorio | sexo | nacionalidad | año | clase | valor
+        rec = {"grupos": {}}
+        for r in filas:
+            if r[1].get("des") != "Ambos sexos":
+                continue
+            nac, v = r[2].get("des"), _sima_v(r[5])
+            if nac == "TOTAL":      rec["total"] = v
+            elif nac == "Española": rec["espanola"] = v
+            elif nac in _SIMA_GRUPOS: rec["grupos"][_SIMA_GRUPOS[nac]] = v
+        if rec.get("total") is not None and rec.get("espanola") is not None:
+            rec["extranjera"] = rec["total"] - rec["espanola"]
+        return rec
+    if clave == "contratos":     # territorio | nacionalidad | sexo | año | ámbito | valor
+        rec = {}
+        for r in filas:
+            if r[2].get("des") != "Ambos sexos":
+                continue
+            k = {"TOTAL": "total", "Española": "espanola", "Extranjera": "extranjera"}.get(r[1].get("des"))
+            if k:
+                rec[k] = _sima_v(r[5])
+        return rec
+    if clave == "afiliados":     # territorio | nacionalidad | año | valor
+        rec = {}
+        for r in filas:
+            k = {"TOTAL": "total", "España": "espanola", "Extranjero": "extranjera"}.get(r[1].get("des"))
+            if k:
+                rec[k] = _sima_v(r[3])
+        return rec
+    if clave == "mnp":           # territorio | sexo | año | nacimientos | defunciones | crec. vegetativo
+        for r in filas:
+            if r[1].get("des") == "Ambos sexos":
+                return {"nacimientos": _sima_v(r[3]), "defunciones": _sima_v(r[4]),
+                        "crecimiento": _sima_v(r[5])}
+        return {}
+    return {}
+
+def sima_marbella():
+    step("SIMA · IECA (paro, contratos y afiliación por nacionalidad; nacimientos y defunciones)")
+    prev = _leer("sima.json") or {}
+    data = {}
+    hoy = datetime.date.today().year
+    for clave, cid in SIMA_CONSULTAS.items():
+        serie = {r["y"]: r for r in (prev.get(clave) or []) if isinstance(r, dict) and r.get("y")}
+        try:
+            anios = _sima_anios(cid)
+        except Exception as e:
+            print(f"    ! {clave}: sin calendario ({e}); se conserva lo publicado")
+            data[clave] = [serie[y] for y in sorted(serie)]
+            continue
+        # el último año publicado se vuelve a pedir (el IECA lo revisa al cerrar el
+        # siguiente); los anteriores ya no cambian y no se vuelven a descargar
+        ultimo = max(serie) if serie else SIMA_DESDE - 1
+        pedir = [y for y in sorted(anios) if max(ultimo, SIMA_DESDE) <= y <= hoy]
+        nuevos = []
+        for y in pedir:
+            try:
+                rec = _sima_anio(clave, _sima_filas_marbella(cid, anios[y]))
+            except Exception as e:
+                print(f"    · {clave} {y}: {e}")
+                continue
+            if any(v is not None for k, v in rec.items() if k != "grupos"):
+                rec["y"] = y
+                serie[y] = rec
+                nuevos.append(y)
+        data[clave] = [serie[y] for y in sorted(serie)]
+        ult = data[clave][-1] if data[clave] else {}
+        print(f"    · {clave}: {len(data[clave])} años (último {ult.get('y', '—')})"
+              + (f" · descargados {nuevos[0]}–{nuevos[-1]}" if nuevos else ""))
+    data["ambito"] = {"afiliados": "Afiliaciones con lugar de TRABAJO en Marbella (media anual)",
+                      "paro": "Paro registrado, media de los doce meses",
+                      "contratos": "Contratos registrados en el año"}
+    write("sima.json", data)
+
+# ------------------------------------- VIVIENDA EN MARBELLA (MIVAU + INE alquiler)
+# El Ministerio de Vivienda publica para los municipios grandes (>25.000 hab.) lo que
+# el INE solo da por provincia: el número de compraventas (notarios) y el valor
+# tasado del m2. Son ficheros .xls del boletín estadístico, trimestrales.
+MIVAU = "https://apps.fomento.gob.es/BoletinOnline2/sedal/"
+MIVAU_TRANS = {"total": "34010210", "nueva": "34010240", "segunda_mano": "34010250"}
+MIVAU_TASADO = "35103500"
+
+def _mivau_libro(codigo):
+    import xlrd
+    return xlrd.open_workbook(file_contents=_get(MIVAU + codigo + ".XLS", timeout=180))
+
+def _mivau_transacciones(codigo):
+    """Serie trimestral [{t: 'AAAA-MM', v}] de Marbella.
+
+    Una sola hoja: filas = municipios, columnas = trimestres consecutivos desde el
+    1T de 2004 (cabecera de años en la fila con 'Año 2004')."""
+    import re
+    sh = _mivau_libro(codigo).sheet_by_index(0)
+    fila_anios = col0 = None
+    for r in range(min(sh.nrows, 30)):
+        for c, v in enumerate(sh.row_values(r)):
+            m = re.match(r"\s*Año\s+(\d{4})", str(v))
+            if m:
+                fila_anios, col0, y0 = r, c, int(m.group(1))
+                break
+        if fila_anios is not None:
+            break
+    if fila_anios is None:
+        raise ValueError("cabecera de trimestres no encontrada")
+    for r in range(sh.nrows):
+        if str(sh.cell_value(r, 1)).strip() == "Marbella" or str(sh.cell_value(r, 2)).strip() == "Marbella":
+            out = []
+            for i, v in enumerate(sh.row_values(r)[col0:]):
+                if isinstance(v, (int, float)) and v != "":
+                    y, q = y0 + i // 4, i % 4 + 1
+                    out.append({"t": f"{y:04d}-{q*3:02d}", "v": int(v)})
+            return out
+    raise ValueError("Marbella no aparece")
+
+def _mivau_tasado():
+    """Valor tasado (€/m2) trimestral de Marbella: total, hasta 5 años y más de 5 años.
+
+    Una hoja por trimestre ('T2A2026'); las columnas se localizan por la cabecera
+    porque el diseño ha cambiado con los años."""
+    import re
+    out = {"total": [], "hasta5": [], "mas5": []}
+    wb = _mivau_libro(MIVAU_TASADO)
+    for sh in wb.sheets():
+        m = re.match(r"\s*T(\d)A(\d{4})", sh.name)
+        if not m:
+            continue
+        q, y = int(m.group(1)), int(m.group(2))
+        if y < 2012:
+            continue
+        cols = None
+        for r in range(min(sh.nrows, 30)):
+            fila = [str(x).strip().lower() for x in sh.row_values(r)]
+            if "total" in fila and any(x.startswith("hasta cinco") for x in fila):
+                cols = {"total": fila.index("total"),
+                        "hasta5": next(i for i, x in enumerate(fila) if x.startswith("hasta cinco")),
+                        "mas5": next(i for i, x in enumerate(fila) if x.startswith("con más de cinco"))}
+                break
+        if not cols:
+            continue
+        for r in range(sh.nrows):
+            if "Marbella" in [str(x).strip() for x in sh.row_values(r)[:4]]:
+                fila = sh.row_values(r)
+                for k, c in cols.items():
+                    if isinstance(fila[c], (int, float)) and fila[c] != "":
+                        out[k].append({"t": f"{y:04d}-{q*3:02d}", "v": round(float(fila[c]), 1)})
+                break
+    for k in out:
+        out[k].sort(key=lambda x: x["t"])
+    return out
+
+def vivienda_marbella():
+    step("Vivienda en Marbella · MIVAU (compraventas y valor tasado) + INE (alquiler)")
+    prev = _leer("vivienda_marbella.json") or {}
+    data = {}
+    trans = {}
+    for k, cod in MIVAU_TRANS.items():
+        try:
+            trans[k] = _mivau_transacciones(cod)
+        except Exception as e:
+            print(f"    ! compraventas {k}: {e}")
+            trans[k] = (prev.get("compraventas") or {}).get(k) or []
+    data["compraventas"] = trans
+    try:
+        data["valor_tasado"] = _mivau_tasado()
+    except Exception as e:
+        print(f"    ! valor tasado: {e}")
+        data["valor_tasado"] = prev.get("valor_tasado") or {}
+    # Índice de Precios de Vivienda en Alquiler (INE IPVA, tabla 59060): anual, municipios >10.000 hab.
+    data["alquiler"] = {"indice": ine_anual("IPVA8735"), "var_anual": ine_anual("IPVA7172")}
+    if not data["alquiler"]["indice"]:
+        data["alquiler"] = prev.get("alquiler") or data["alquiler"]
+    tt = trans.get("total") or []
+    vt = (data["valor_tasado"] or {}).get("total") or []
+    print(f"    · compraventas: {len(tt)} trimestres (último {tt[-1]['t'] if tt else '—'}) · "
+          f"valor tasado: {len(vt)} (último {vt[-1]['t'] if vt else '—'})")
+    write("vivienda_marbella.json", data)
+
 # ---------------------------------------------------------------- VIGILANTE DE FRESCURA
 # Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
 # obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
@@ -991,6 +1244,10 @@ _FRESCURA_MAX = {
     "coyuntura.json": 3,
     "paro_anual.json": 16, "empresas.json": 20,
     "renta.json": _ATLAS_INE, "demografia.json": 14,
+    # sima.json: medias anuales del IECA; el año N completo sale en el 1T de N+1
+    "sima.json": 16,
+    # vivienda_marbella.json: MIVAU trimestral, ~3 meses tras cerrar el trimestre
+    "vivienda_marbella.json": 7,
 }
 
 # Excepciones POR SERIE dentro de un fichero. Hacen falta cuando en el mismo JSON
@@ -1006,7 +1263,17 @@ _FRESCURA_MAX = {
 # al recogerse agosto. El tope propio se mide contra el calendario REAL de la fuente.
 _VUT_INE = 7      # ~4 meses de desfase habitual + margen
 
+# Migraciones (INE, op. EMCR): el año N se publica a mediados de N+2 (en octubre de
+# 2026 el último es 2024), así que el desfase sube a ~30 meses antes de cada entrega.
+_EMCR_INE = 32
+# Movimiento natural del IECA: mismo ciclo, el año N llega a finales de N+1 o en N+2.
+_MNP_IECA = 30
+# Índice de alquiler del INE (IPVA): fuente fiscal, el año N sale a finales de N+2.
+_IPVA_INE = 38
+
 _FRESCURA_SERIE = {
+    "sima.json": {"mnp": _MNP_IECA},
+    "vivienda_marbella.json": {"alquiler.indice": _IPVA_INE, "alquiler.var_anual": _IPVA_INE},
     "turismo.json": {
         "vut.viviendas": _VUT_INE, "vut.plazas": _VUT_INE, "vut.pct_viviendas": _VUT_INE,
     },
@@ -1014,6 +1281,9 @@ _FRESCURA_SERIE = {
         "edad_media": _ATLAS_INE, "pct_menor18": _ATLAS_INE, "pct_mayor65": _ATLAS_INE,
         "pct_espanola": _ATLAS_INE, "tamano_hogar": _ATLAS_INE,
         "pct_unipersonales": _ATLAS_INE,
+        **{f"migraciones.{k}": _EMCR_INE for k in (
+            "inmig_extranjero", "emig_extranjero", "saldo_total", "saldo_exterior",
+            "saldo_interior", "inter_in_esp", "inter_in_ext", "inter_out_esp", "inter_out_ext")},
     },
 }
 
@@ -1138,7 +1408,7 @@ def main():
     errors = 0
     # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
     for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
-               afiliacion, sepe_laboral, paro_anual):
+               afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella):
         try:
             fn()
         except Exception as e:
@@ -1151,8 +1421,9 @@ def main():
         print(f"    !! fallo en auditar_frescura: {e}")
     meta = {
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "fuentes": ["INE Tempus3", "IECA/BADEA (afiliación SS)",
-                    "Observatorio Argos (SAE)", "SEPE datos abiertos"],
+        "fuentes": ["INE Tempus3", "IECA/BADEA (afiliación SS y SIMA)",
+                    "Observatorio Argos (SAE)", "SEPE datos abiertos",
+                    "MIVAU (compraventas y valor tasado municipal)"],
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
         "frescura": frescura,

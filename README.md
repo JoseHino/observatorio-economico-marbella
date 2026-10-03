@@ -9,7 +9,7 @@ muestra el último dato publicado, sin que nadie tenga que tocar nada.
 
 ```
 GitHub Actions (cron diario)
-   └─ fetch_data.py  ── descarga ──►  INE Tempus3 · IECA/BADEA · Argos (SAE) · SEPE datos abiertos
+   └─ fetch_data.py  ── descarga ──►  INE Tempus3 · IECA/BADEA · Argos (SAE) · SEPE · MIVAU
         └─ escribe  data/*.json
 GitHub Pages sirve  index.html + data/*.json   (mismo origen → sin problemas de CORS)
 ```
@@ -30,6 +30,13 @@ GitHub Pages sirve  index.html + data/*.json   (mismo origen → sin problemas d
 | Mercado laboral | Paro registrado (media anual) | Calculada con los 12 meses | Anual |
 | Contratación | Contratos registrados (tipo, sexo, sector) | Observatorio Argos (SAE) · respaldo SEPE | Mensual (día 2) |
 | Comparativa | Marbella · Málaga · Andalucía · España | SEPE datos abiertos | Mensual |
+| Mercado laboral | Paro, contratos y afiliación por nacionalidad (españoles / extranjeros) | IECA · SIMA | Anual |
+| Turismo | Viajeros y pernoctaciones hoteleras por residencia (España / extranjero) | INE · EOH | Mensual |
+| Demografía | Población por nacionalidad, lugar de nacimiento y edad | INE · Estadística Continua de Población | Anual |
+| Demografía | Migraciones con el extranjero y con otros municipios | INE · EMCR | Anual |
+| Demografía | Nacimientos, defunciones y crecimiento vegetativo | IECA · SIMA | Anual |
+| Vivienda | Compraventas (nueva / segunda mano) y valor tasado €/m² **de Marbella** | Ministerio de Vivienda (MIVAU) | Trimestral |
+| Vivienda | Índice de precios del alquiler **de Marbella** | INE · IPVA | Anual |
 | Turismo | Viajeros, pernoctaciones, ADR, RevPAR | INE · EOH | Mensual |
 | Tejido empresarial | Empresas activas (DIRCE) | INE | Anual |
 | Renta | Renta media por persona y hogar | INE · Atlas de renta | Anual |
