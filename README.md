@@ -9,7 +9,7 @@ muestra el último dato publicado, sin que nadie tenga que tocar nada.
 
 ```
 GitHub Actions (cron diario)
-   └─ fetch_data.py  ── descarga ──►  INE Tempus3 · IECA/BADEA · SEPE datos abiertos
+   └─ fetch_data.py  ── descarga ──►  INE Tempus3 · IECA/BADEA · Argos (SAE) · SEPE datos abiertos
         └─ escribe  data/*.json
 GitHub Pages sirve  index.html + data/*.json   (mismo origen → sin problemas de CORS)
 ```
@@ -25,9 +25,11 @@ GitHub Pages sirve  index.html + data/*.json   (mismo origen → sin problemas d
 
 | Familia | Indicadores | Fuente | Frecuencia |
 |---|---|---|---|
-| Mercado laboral | Paro registrado (mensual, por sexo y sector) | SEPE datos abiertos | Mensual |
-| Mercado laboral | Paro registrado (media anual oficial) | IECA / BADEA | Anual |
-| Contratación | Contratos registrados | SEPE datos abiertos | Mensual |
+| Mercado laboral | Paro registrado mensual: total y sexo | Observatorio Argos (SAE) · respaldo SEPE | Mensual (día 2) |
+| Mercado laboral | Paro registrado mensual: edad y sector | SEPE datos abiertos | Mensual |
+| Mercado laboral | Paro registrado (media anual) | Calculada con los 12 meses | Anual |
+| Contratación | Contratos registrados (tipo, sexo, sector) | Observatorio Argos (SAE) · respaldo SEPE | Mensual (día 2) |
+| Comparativa | Marbella · Málaga · Andalucía · España | SEPE datos abiertos | Mensual |
 | Turismo | Viajeros, pernoctaciones, ADR, RevPAR | INE · EOH | Mensual |
 | Tejido empresarial | Empresas activas (DIRCE) | INE | Anual |
 | Renta | Renta media por persona y hogar | INE · Atlas de renta | Anual |
@@ -60,3 +62,13 @@ Cada indicador es una función en `fetch_data.py` que escribe un `data/<algo>.js
 render en `index.html`. La cabecera del script documenta los códigos usados (INE, nodo BADEA de
 Marbella = `2980`, CSV municipal del SEPE). Fuentes verificadas con CORS/consulta "lo último":
 INE Tempus3 (`?nult=N`) e IECA/BADEA REST.
+
+## Por qué Argos para el paro y los contratos de Marbella
+
+El Observatorio Argos del Servicio Andaluz de Empleo publica el paro y los contratos **por
+municipio** el mismo día en que se anuncia el paro (2.º día hábil del mes), que es de donde sale
+el dato que da el Ayuntamiento en sus notas de prensa. El SEPE publica su fichero municipal días
+después. Cotejado de enero de 2024 a agosto de 2026: el paro coincide en todos los meses y los
+contratos en el total (alguna diferencia de 1-2 entre categorías por revisiones). Argos no da el
+paro municipal por edad ni sector ni cubre España: eso sigue viniendo del SEPE, que además hace de
+respaldo si Argos no contesta.

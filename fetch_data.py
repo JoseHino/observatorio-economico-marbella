@@ -3,7 +3,8 @@
 """
 Observatorio Económico de Marbella — recolector de datos dinámicos.
 
-Descarga las fuentes oficiales (INE Tempus3, IECA/BADEA, SEPE datos abiertos) y
+Descarga las fuentes oficiales (INE Tempus3, IECA/BADEA, Observatorio Argos del
+SAE, SEPE datos abiertos) y
 escribe ficheros JSON en data/. El panel (index.html) los lee desde el mismo
 origen, por lo que no depende de CORS ni de ningún PC encendido.
 
@@ -117,6 +118,12 @@ def _ultimo_mes_publicado(name, clave="serie"):
     """Último periodo de la serie ya publicada en data/, o None."""
     s = (_leer(name) or {}).get(clave) or []
     ts = [r["t"] for r in s if isinstance(r, dict) and r.get("t")]
+    return max(ts) if ts else None
+
+def _ultimo_mes_con_desglose(name, clave="serie"):
+    """Último periodo publicado que trae el desglose por sector, o None."""
+    s = (_leer(name) or {}).get(clave) or []
+    ts = [r["t"] for r in s if isinstance(r, dict) and r.get("t") and r.get("sectores")]
     return max(ts) if ts else None
 
 def step(title):
@@ -558,8 +565,11 @@ def _sepe_patch_meses(paro_mb, contr_mb):
     # ponía a pedir uno por uno TODOS los meses desde 2021 (66 ficheros × 2 peticiones
     # × 3 reintentos) contra una web que ya estaba dando 503. Trece minutos de Action
     # martilleando al SEPE para no traer nada.
+    # Para el paro cuenta el último mes publicado CON desglose (edad y sector): los
+    # meses que llegan antes por Argos solo traen total y sexo, y el .xls del SEPE
+    # sigue haciendo falta para completarlos.
     ult_paro = max(filter(None, [paro_mb[-1]["t"] if paro_mb else None,
-                                 _ultimo_mes_publicado("paro_mensual.json")]),
+                                 _ultimo_mes_con_desglose("paro_mensual.json")]),
                    default="2020-12")
     ult_contr = max(filter(None, [contr_mb[-1]["t"] if contr_mb else None,
                                   _ultimo_mes_publicado("contratos_mensual.json")]),
@@ -607,10 +617,127 @@ def _sepe_patch_meses(paro_mb, contr_mb):
         print(f"    + parche .xls mensual del SEPE: {', '.join(add)}")
     return add
 
+# ---- Observatorio Argos (Servicio Andaluz de Empleo) -------------------------
+# El paro registrado en Andalucía lo gestiona el SAE, y su Observatorio Argos
+# publica el dato MUNICIPAL el mismo día de la rueda de prensa del paro (el 2 de
+# octubre de 2026 a las 09:00 ya tenía septiembre), mientras que el .xls municipal
+# del SEPE tarda varios días más y el CSV anual, un mes. Es la fuente que usa el
+# Ayuntamiento en sus notas de prensa.
+#
+# Cotejado contra el SEPE de ene-2024 a ago-2026: el paro (total, hombres,
+# mujeres) coincide en los 32 meses; los contratos coinciden en el total de todos
+# los meses y difieren en 1-2 contratos entre categorías en algunos (Argos lleva
+# revisiones más recientes). Por eso Argos MANDA para Marbella y el SEPE queda:
+#   · para el paro por edad y por sector, que Argos no da por municipio;
+#   · para la comparativa con España (Argos solo cubre Andalucía);
+#   · como respaldo si Argos no contesta.
+ARGOS = "https://www.juntadeandalucia.es/servicioandaluzdeempleo/web/argos/"
+_MESES_CAP = [m.capitalize() for m in _MESES_ES]
+
+def _argos_filas(accion, y0, y1):
+    """Filas de la tabla de resultados de una consulta municipal de Argos.
+
+    El formulario es un POST con sesión (jsessionid en cookie): primero se abre la
+    página para obtenerla y luego se envía la consulta para Marbella, de enero de
+    y0 hasta diciembre de y1 (Argos devuelve solo los meses ya publicados).
+    """
+    import re, html as _html, http.cookiejar, urllib.parse, time
+    datos = urllib.parse.urlencode({
+        "provincia": PROV, "municipio": MUN,
+        "mesInicio": "Enero", "anyoInicio": str(y0),
+        "mesFin": "Diciembre", "anyoFin": str(y1), "accion": "Buscar"}).encode()
+    last = None
+    for intento in range(3):
+        try:
+            op = urllib.request.build_opener(
+                urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            op.addheaders = list(UA.items())
+            op.open(ARGOS + accion, timeout=90).read()
+            t = op.open(ARGOS + accion, datos, timeout=120).read().decode("latin-1")
+            filas = []
+            for tr in re.findall(r"<tr.*?</tr>", t, re.S):
+                celdas = [_html.unescape(re.sub(r"<[^>]+>", "", c)).strip()
+                          for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr, re.S)]
+                if celdas:
+                    filas.append(celdas)
+            return filas
+        except Exception as e:
+            last = e
+            if intento < 2:
+                time.sleep(2.0 * (intento + 1))
+    raise last
+
+def _argos_n(s):
+    """'6.246' → 6246 (Argos usa punto de millares)."""
+    return iv((s or "").replace(".", ""))
+
+def argos_marbella(y0, y1):
+    """Paro (total/sexo) y contratos de Marbella según Argos: dos dicts {t: registro}."""
+    paro, contr = {}, {}
+    # Demanda: "Septiembre-2026" | demandantes H M T | DENOs H M T | PARADOS H M T | TEAS | otros
+    for f in _argos_filas("demandaEmpleo.do", y0, y1):
+        if len(f) >= 10 and "-" in f[0] and f[0].split("-")[0] in _MESES_CAP:
+            mes, anyo = f[0].split("-")
+            t = f"{anyo}-{_MESES_CAP.index(mes) + 1:02d}"
+            paro[t] = {"total": _argos_n(f[9]),
+                       "hombres": _argos_n(f[7]), "mujeres": _argos_n(f[8])}
+    # Contratos: Mes | Año | IH TH IM TM | IA TA | II TI | IC TC | IS TS | TotIndef TotTemp Total
+    for f in _argos_filas("buscarContratos.do", y0, y1):
+        if len(f) >= 17 and f[0] in _MESES_CAP and f[1].isdigit():
+            t = f"{f[1]}-{_MESES_CAP.index(f[0]) + 1:02d}"
+            v = [_argos_n(x) for x in f[2:17]]
+            contr[t] = {"t": t, "total": v[14],
+                "indefinidos": v[12], "temporales": v[13],
+                "indef_h": v[0], "temp_h": v[1], "indef_m": v[2], "temp_m": v[3],
+                "sectores": {"agricultura": v[4] + v[5], "industria": v[6] + v[7],
+                             "construccion": v[8] + v[9], "servicios": v[10] + v[11]},
+                "fuente": "argos"}
+    return paro, contr
+
+def _argos_aplica(paro_mb, contr_mb, years):
+    """Superpone Argos sobre lo bajado del SEPE. Devuelve (paro_mb, contr_mb).
+
+    Paro: Argos fija total/hombres/mujeres; la edad y el sector se conservan del
+    SEPE (de esta pasada o de lo ya publicado) y, si el SEPE aún no ha sacado ese
+    mes, el registro va sin ellos hasta que lo saque.
+    Contratos: el registro de Argos sustituye entero al del SEPE.
+    Si Argos no contesta, no se toca nada: queda el SEPE como hasta ahora.
+    """
+    step("Paro y contratos de Marbella · Observatorio Argos (SAE, Junta de Andalucía)")
+    try:
+        a_paro, a_contr = argos_marbella(min(years), max(years))
+    except Exception as e:
+        print(f"    ! Argos no contesta ({e}): se queda el SEPE")
+        return paro_mb, contr_mb
+    if not a_paro and not a_contr:
+        print("    ! Argos no ha devuelto filas: se queda el SEPE")
+        return paro_mb, contr_mb
+
+    publicados = {r["t"]: r for r in (_leer("paro_mensual.json") or {}).get("serie") or []
+                  if isinstance(r, dict) and r.get("t")}
+    sepe = {r["t"]: r for r in paro_mb}
+    for t, a in a_paro.items():
+        base = dict(publicados.get(t) or {})
+        base.update(sepe.get(t) or {})
+        base.update(a, t=t)
+        base["fuente"] = "argos"
+        sepe[t] = base
+    paro_mb = list(sepe.values())
+
+    cm = {r["t"]: r for r in contr_mb}
+    cm.update(a_contr)
+    contr_mb = list(cm.values())
+
+    ult = lambda d: max(d) if d else "—"
+    print(f"    · paro: {len(a_paro)} meses (último {ult(a_paro)}) · "
+          f"contratos: {len(a_contr)} meses (último {ult(a_contr)})")
+    return paro_mb, contr_mb
+
 def sepe_laboral():
     """Descarga los CSV nacionales del SEPE (paro y contratos) y en una sola
     pasada extrae el detalle de Marbella y agrega España / Andalucía / Málaga
-    para la comparativa territorial (misma metodología → totalmente comparable)."""
+    para la comparativa territorial (misma metodología → totalmente comparable).
+    El dato de Marbella se corrige después con Argos (ver _argos_aplica)."""
     year = datetime.date.today().year
     years = (year, year-1, year-2)
 
@@ -685,6 +812,8 @@ def sepe_laboral():
     # ----- PARCHE: meses recientes aún no refundidos en el CSV anual -----
     # Lee el .xls mensual del SEPE (sale antes) para completar Marbella hasta hoy.
     _sepe_patch_meses(paro_mb, contr_mb)
+    # ----- ARGOS: fuente principal para Marbella (sale el mismo día que el dato) -----
+    paro_mb, contr_mb = _argos_aplica(_dedup_sorted(paro_mb), _dedup_sorted(contr_mb), years)
     paro_mb = _dedup_sorted(paro_mb)
     contr_mb = _dedup_sorted(contr_mb)
     write_serie("paro_mensual.json", paro_mb)
@@ -1022,7 +1151,8 @@ def main():
         print(f"    !! fallo en auditar_frescura: {e}")
     meta = {
         "generado": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "fuentes": ["INE Tempus3", "IECA/BADEA (afiliación SS)", "SEPE datos abiertos"],
+        "fuentes": ["INE Tempus3", "IECA/BADEA (afiliación SS)",
+                    "Observatorio Argos (SAE)", "SEPE datos abiertos"],
         "municipio": "Marbella (29069)",
         "ambito_comparativa": "Marbella · Málaga (29) · Andalucía · España",
         "frescura": frescura,

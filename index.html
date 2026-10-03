@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Observatorio Económico de Marbella</title>
-<meta name="description" content="Indicadores socioeconómicos oficiales de Marbella, actualizados cada día desde INE, IECA y SEPE.">
+<meta name="description" content="Indicadores socioeconómicos oficiales de Marbella, actualizados cada día desde INE, IECA, Argos (SAE) y SEPE.">
 <meta name="theme-color" content="#f5f5f7">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -163,9 +163,10 @@ footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-si
 <b>Fuentes:</b>
 <a href="https://www.ine.es/" target="_blank">INE</a> (Atlas de renta, DIRCE, EOH/EOAP/VUT, ETDP, IPV, Tempus3) ·
 <a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/" target="_blank">IECA · BADEA</a> ·
+<a href="https://www.juntadeandalucia.es/servicioandaluzdeempleo/web/argos/web/es/ARGOS/Territorios/index.html" target="_blank">Observatorio Argos (SAE)</a> ·
 <a href="https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html" target="_blank">SEPE · datos abiertos</a> ·
 <a href="https://www.juntadeandalucia.es/institutodeestadisticaycartografia/badea/informe/anual?CodOper=b3_291&idNode=1323" target="_blank">IECA · Afiliación a la Seguridad Social</a>.<br>
-El proceso de actualización (<code>fetch_data.py</code>) se ejecuta en GitHub Actions y vuelca los datos a <code>/data/*.json</code>, leídos desde el mismo origen. La comparativa territorial (Marbella · Málaga · Andalucía · España) se calcula agregando el mismo fichero municipal del SEPE, por lo que las cifras son plenamente comparables. La compraventa de vivienda, las hipotecas, el IPV y los índices de precios y consumo se ofrecen a nivel provincial (Málaga) o autonómico (Andalucía), su máxima desagregación oficial.
+El proceso de actualización (<code>fetch_data.py</code>) se ejecuta en GitHub Actions y vuelca los datos a <code>/data/*.json</code>, leídos desde el mismo origen. El paro y la contratación de Marbella se toman del Observatorio Argos del Servicio Andaluz de Empleo, que los publica el mismo día en que se anuncia el paro (coinciden con el SEPE, que los publica días después); del SEPE se toman el paro por edad y sector y los agregados de comparación. La comparativa territorial (Marbella · Málaga · Andalucía · España) se calcula agregando el mismo fichero municipal del SEPE, por lo que las cifras son plenamente comparables. La compraventa de vivienda, las hipotecas, el IPV y los índices de precios y consumo se ofrecen a nivel provincial (Málaga) o autonómico (Andalucía), su máxima desagregación oficial.
 </div></footer>
 
 <script>
@@ -188,10 +189,13 @@ const DATA={}, charts={}, rendered={};
 /* ---------- fuentes (enlace directo por gráfica) ---------- */
 const MES_ES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto',
   'septiembre','octubre','noviembre','diciembre'];
-/* Página del SEPE del último mes publicado: lleva al dato concreto, no a la portada. */
+/* Último mes de paro con desglose por edad y sector. Argos (SAE) adelanta el total y
+   el sexo el mismo día del dato; edad y sector llegan días después con el SEPE. */
+const paroDesg=s=>{for(let i=(s||[]).length-1;i>=0;i--){if(s[i].sectores)return s[i];}return null;};
+/* Página del SEPE del último mes que el SEPE ya ha publicado: lleva al dato concreto. */
 function sepeSrc(){
-  const s=((DATA.paro_mensual||{}).serie)||[];
-  const t=s.length?s[s.length-1].t:null;
+  const d=paroDesg(((DATA.paro_mensual||{}).serie)||[]);
+  const t=d?d.t:null;
   if(!t) return ['SEPE · paro y contratos por municipios',
     'https://www.sepe.es/HomeSepe/que-es-el-sepe/estadisticas/datos-estadisticos/municipios.html'];
   const [a,m]=t.split('-');
@@ -241,7 +245,7 @@ const SEC_LONG={laboral:'Mercado laboral',afiliacion:'Afiliación a la Seguridad
   demografia:'Demografía',vivienda:'Vivienda'};
 /* descripción corta de cada sección, para los accesos de la portada */
 const SEC_DESC={
-  laboral:'Paro registrado mensual del SEPE por sexo, edad y sector.',
+  laboral:'Paro registrado mensual (Argos-SAE y SEPE) por sexo, edad y sector.',
   afiliacion:'Afiliados a la Seguridad Social por régimen, con autónomos aparte.',
   contratacion:'Contratos firmados cada mes y calidad del empleo.',
   comparativa:'Marbella frente a Málaga, Andalucía y España.',
@@ -252,6 +256,10 @@ const SEC_DESC={
   demografia:'Población del Padrón, edad y nacionalidad.',
   vivienda:'Compraventa, hipotecas y precio de la vivienda.'};
 const geoTag=t=>'<span class="tag geo">'+t+'</span>';
+/* Observatorio Argos: la consulta municipal es un formulario (Málaga › Marbella). */
+const ARGOS='https://www.juntadeandalucia.es/servicioandaluzdeempleo/web/argos/';
+const argosParoSrc=()=>['Observatorio Argos (SAE) · demanda y paro por municipio',ARGOS+'demandaEmpleo.do'];
+const argosContrSrc=()=>['Observatorio Argos (SAE) · contratos por municipio',ARGOS+'buscarContratos.do'];
 const nota=t=>'<span class="nota">⏱ '+t+'</span>';
 
 function card(id,title,sub,tag,src,full){
@@ -277,6 +285,7 @@ const lastY=arr=>{const x=last(arr);return x?x.y:null;};
 function CARD_ULT(){
   const D=DATA, T=(D.turismo||{}), V=(D.vivienda||{}), S=(D.sociedades||{});
   const pmT=D.paro_mensual&&D.paro_mensual.serie?last(D.paro_mensual.serie).t:null;
+  const pdT=D.paro_mensual&&D.paro_mensual.serie?(paroDesg(D.paro_mensual.serie)||{}).t:null;
   const cmT=D.contratos_mensual&&D.contratos_mensual.serie?last(D.contratos_mensual.serie).t:null;
   const cpT=D.comparativa_laboral&&D.comparativa_laboral.serie?last(D.comparativa_laboral.serie).t:null;
   const afT=D.afiliacion&&D.afiliacion.periodos?last(D.afiliacion.periodos):null;
@@ -293,7 +302,7 @@ function CARD_ULT(){
   const demYatlas=D.demografia&&D.demografia.pct_espanola?lastY(D.demografia.pct_espanola):null;
   const M=(t)=>['mes',t], TR=(t)=>['trim',t], AN=(y)=>['anual',y];
   return {
-    c_paro:M(pmT), c_paro_sec:M(pmT), c_paro_edad:M(pmT),
+    c_paro:M(pmT), c_paro_sec:M(pdT), c_paro_edad:M(pdT),
     c_afi_tot:M(afT), c_afi_reg:M(afT), c_afi_auto:M(afT), c_afi_evo:M(afT), c_afi_idx:M(afT), c_afi_pctaut:M(afT),
     c_contr:M(cmT), c_temp:M(cmT), c_contr_sexo:M(cmT), c_contr_sec:M(cmT),
     c_comp_paro:M(cpT), c_comp_temp:M(cpT),
@@ -385,7 +394,7 @@ function buildResumen(){
   const upd=DATA.__upd;
   el.innerHTML='<div class="hero">'+
     '<h1>La economía de <em>Marbella</em>, al día.</h1>'+
-    '<p>Empleo, turismo, empresas, precios y vivienda: diez apartados de indicadores oficiales que se descargan solos cada día del INE, el IECA y el SEPE. Cada gráfica enlaza con su fuente.</p>'+
+    '<p>Empleo, turismo, empresas, precios y vivienda: diez apartados de indicadores oficiales que se descargan solos cada día del INE, el IECA, el Servicio Andaluz de Empleo y el SEPE. Cada gráfica enlaza con su fuente.</p>'+
     '<div class="meta"><span class="pill"><span class="dot"></span><span id="status">'+(DATA.__status||'Cargando…')+'</span></span>'+
     '<span class="pill">Municipio de Marbella · 29069</span></div></div>'+
     '<div class="h2">Marbella hoy</div>'+
@@ -404,16 +413,16 @@ function buildLaboral(){
   const el=document.getElementById('laboral');
   const pa=DATA.paro_anual||{};
   const anualHtml=pa.total?('<div class="h2" style="margin-top:22px">Media anual del paro registrado</div>'+
-      '<div class="cs" style="margin-bottom:10px">'+geoTag('Marbella')+'Media de los doce meses del año, calculada con el paro registrado del SEPE.'+nota('Anual. Se cierra al completarse el año.')+'</div>'+
+      '<div class="cs" style="margin-bottom:10px">'+geoTag('Marbella')+'Media de los doce meses del año, calculada con el paro registrado mensual.'+nota('Anual. Se cierra al completarse el año.')+'</div>'+
       '<div class="kpis">'+
       kpi(fmt(pa.total.v),'Paro medio anual · '+pa.total.y,'',' ')+
       (pa.mujeres?kpi(fmt(pa.mujeres.v),'Mujeres · '+pa.mujeres.y,'',''):'')+
       (pa.hombres?kpi(fmt(pa.hombres.v),'Hombres · '+pa.hombres.y,'',''):'')+
-      '</div><div class="src" style="margin-top:-6px">Fuente: <a href="'+sepeSrc()[1]+'" target="_blank" rel="noopener">'+sepeSrc()[0]+'</a></div>'):'';
+      '</div><div class="src" style="margin-top:-6px">Fuente: <a href="'+argosParoSrc()[1]+'" target="_blank" rel="noopener">'+argosParoSrc()[0]+'</a></div>'):'';
   el.innerHTML='<div class="h2">Mercado laboral · Paro registrado</div>'+
-   '<div class="pdesc">Paro registrado municipal del SEPE (mensual, con desglose por sexo, edad y sector) y su media anual. Todos los datos referidos al municipio de Marbella.</div>'+
+   '<div class="pdesc">Paro registrado municipal (mensual) y su media anual. El total y el sexo salen del Observatorio Argos del Servicio Andaluz de Empleo, que publica el dato el mismo día que se anuncia el paro; la edad y el sector, del SEPE, que los publica unos días después. Todos los datos referidos al municipio de Marbella.</div>'+
    '<div class="grid">'+
-    card('c_paro','Paro registrado mensual',geoTag('Marbella')+'Personas inscritas en el SEPE al cierre de cada mes, por sexo'+nota('Mensual. El SEPE publica con ~1-2 meses de desfase.'),'live',sepeSrc(),true)+
+    card('c_paro','Paro registrado mensual',geoTag('Marbella')+'Personas paradas registradas al cierre de cada mes, por sexo'+nota('Mensual. Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosParoSrc(),true)+
     card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'Distribución del último mes por sector de procedencia'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
     card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'Estructura del último mes — útil para empleo juvenil y senior'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
    '</div>'+anualHtml;
@@ -423,9 +432,10 @@ function buildLaboral(){
     charts.paro=new Chart(c('c_paro'),{type:'line',data:{labels:L,datasets:[
       ds('Total',s.map(x=>x.total),COL.c1,true),ds('Hombres',s.map(x=>x.hombres),COL.c4),ds('Mujeres',s.map(x=>x.mujeres),COL.c2)]},
       options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});
-    const ls=last(s).sectores||{};
+    const dg=paroDesg(s)||{};               // el último mes puede venir de Argos sin desglose
+    const ls=dg.sectores||{};
     doughnut('c_paro_sec',[['Servicios',ls.servicios,COL.c1],['Construcción',ls.construccion,COL.c6],['Industria',ls.industria,COL.c5],['Agricultura',ls.agricultura,COL.c4],['Sin empleo ant.',ls.sin_empleo,COL.mut]]);
-    const le=last(s).edad||{};
+    const le=dg.edad||{};
     barCat('c_paro_edad',['Menor de 25','25 a 44','45 y más'],[le.menor25,le.de25a44,le.mayor45],[COL.c4,COL.c1,COL.c6],'personas');
   }
 }
@@ -500,10 +510,10 @@ function buildContr(){
    '<div class="pdesc">Contratos registrados cada mes diferenciando indefinidos y temporales, por sexo y sector. La reforma laboral de 2022 disparó la contratación indefinida.</div>'+
    '<div id="contr-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes'+nota('Mensual. ~1-2 meses de desfase de publicación.'),'live',sepeSrc(),true)+
-    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual'+nota('Mensual. Calculada como temporales ÷ total del mes.'),'live',sepeSrc())+
-    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
-    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'Distribución sectorial del último mes'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc(),true)+
+    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes'+nota('Mensual. Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosContrSrc(),true)+
+    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual'+nota('Mensual. Calculada como temporales ÷ total del mes.'),'live',argosContrSrc())+
+    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo'+nota('Mensual. Refleja el último mes disponible.'),'live',argosContrSrc())+
+    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'Distribución sectorial del último mes'+nota('Mensual. Refleja el último mes disponible.'),'live',argosContrSrc(),true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
   const cur=last(s),tt=cur.total?cur.temporales/cur.total*100:0;
