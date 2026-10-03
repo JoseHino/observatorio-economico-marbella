@@ -114,12 +114,15 @@ const HERRAMIENTAS = [
   },
   {
     name: "calcular",
-    description: "Hace cálculos exactos sobre una serie. Operaciones: 'variacion' (periodo frente a periodo_referencia; por defecto el último dato frente al mismo periodo del año anterior), 'variacion_periodo_anterior' (frente al dato inmediatamente anterior), 'ranking_mismo_mes' (compara un mes con el mismo mes de todos los años: posición y récords), 'maximo_minimo', 'media' y 'suma' (entre desde y hasta).",
+    description: "Hace cálculos exactos sobre una serie. Operaciones: 'variacion' (periodo frente a periodo_referencia; por defecto el último dato frente al mismo periodo del año anterior), 'variacion_periodo_anterior' (frente al dato inmediatamente anterior), 'ranking_mismo_mes' (compara un mes con el mismo mes de todos los años: posición y récords), 'maximo_minimo', 'media' y 'suma' (entre desde y hasta), 'comparar_rangos' (suma de desde-hasta frente a suma de desde_referencia-hasta_referencia, con diferencia y %; por ejemplo un año completo frente al anterior) y 'proporcion' (peso en % de la serie id sobre la serie id_total, en un periodo o sumando desde-hasta; por ejemplo turistas británicos sobre el total de extranjeros).",
     input_schema: {
       type: "object",
       properties: {
         id: { type: "string" },
-        operacion: { type: "string", enum: ["variacion", "variacion_periodo_anterior", "ranking_mismo_mes", "maximo_minimo", "media", "suma"] },
+        operacion: { type: "string", enum: ["variacion", "variacion_periodo_anterior", "ranking_mismo_mes", "maximo_minimo", "media", "suma", "comparar_rangos", "proporcion"] },
+        id_total: { type: "string", description: "Serie total para 'proporcion'." },
+        desde_referencia: { type: "string", description: "Inicio del rango de referencia en 'comparar_rangos'." },
+        hasta_referencia: { type: "string", description: "Fin del rango de referencia en 'comparar_rangos'." },
         periodo: { type: "string", description: "Periodo a analizar (por defecto, el último)." },
         periodo_referencia: { type: "string", description: "Periodo con el que comparar en 'variacion'." },
         desde: { type: "string" },
@@ -173,7 +176,7 @@ function ejecutarHerramienta(nombre, ent, SERIES) {
 
   if (nombre === "calcular") {
     const ok = typeof ent.id === "string" && typeof ent.operacion === "string" &&
-      ["periodo", "periodo_referencia", "desde", "hasta"].every((k) => esTexto(ent[k]));
+      ["periodo", "periodo_referencia", "desde", "hasta", "id_total", "desde_referencia", "hasta_referencia"].every((k) => esTexto(ent[k]));
     if (!ok) throw new Error("Parámetros no válidos.");
     const s = ficha(ent.id);
     const P = Object.fromEntries(s.puntos);
@@ -230,6 +233,37 @@ function ejecutarHerramienta(nombre, ent, SERIES) {
         const mx = pts.reduce((a, b) => (b[1] > a[1] ? b : a)), mn = pts.reduce((a, b) => (b[1] < a[1] ? b : a));
         return `${cab}\n${rango[0].toUpperCase() + rango.slice(1)}: máximo ${fmt(mx[1])} en ${np(mx[0])}; mínimo ${fmt(mn[1])} en ${np(mn[0])}.`;
       }
+      case "comparar_rangos": {
+        if (!ent.desde || !ent.hasta || !ent.desde_referencia || !ent.hasta_referencia)
+          return "Indica desde, hasta, desde_referencia y hasta_referencia.";
+        const a = enRango(s, ent.desde, ent.hasta), b = enRango(s, ent.desde_referencia, ent.hasta_referencia);
+        if (!a.length || !b.length) return "Algún rango no tiene datos.";
+        const sa = a.reduce((x, [, v]) => x + v, 0), sb = b.reduce((x, [, v]) => x + v, 0);
+        const d = sa - sb, pc = sb ? (d / sb) * 100 : null;
+        return `${cab}\nSuma ${np(a[0][0])} - ${np(a[a.length - 1][0])} (${a.length} datos): ${fmt(sa)}` +
+          `\nSuma ${np(b[0][0])} - ${np(b[b.length - 1][0])} (${b.length} datos): ${fmt(sb)}` +
+          `\nDiferencia: ${d >= 0 ? "+" : "−"}${fmt(Math.abs(d))}` + (pc != null ? ` (${pc >= 0 ? "+" : "−"}${fmt(Math.abs(pc), 1)} %)` : "") +
+          (a.length !== b.length ? "\nAtención: los rangos no tienen el mismo número de datos." : "");
+      }
+      case "proporcion": {
+        if (!ent.id_total) return "Indica id_total (la serie que hace de total).";
+        const t = ficha(ent.id_total);
+        if (t.unidad !== s.unidad) return `Las unidades no coinciden (${s.unidad} frente a ${t.unidad}); no se puede calcular una proporción.`;
+        const T = Object.fromEntries(t.puntos);
+        let num, den, cuando;
+        if (ent.desde || ent.hasta) {
+          const pts = enRango(s, ent.desde, ent.hasta).filter(([p]) => T[p] != null);
+          if (!pts.length) return "No hay periodos comunes con datos en ese rango.";
+          num = pts.reduce((x, [, v]) => x + v, 0);
+          den = pts.reduce((x, [p]) => x + T[p], 0);
+          cuando = `sumando ${np(pts[0][0])} - ${np(pts[pts.length - 1][0])} (${pts.length} datos)`;
+        } else {
+          if (P[per] == null || T[per] == null) return `No hay datos de ambas series para ${np(per)}.`;
+          num = P[per]; den = T[per]; cuando = np(per);
+        }
+        return `${s.nombre} sobre ${t.nombre}, ${cuando}: ${fmt(num)} de ${fmt(den)} = ${fmt((num / den) * 100, 1)} %` +
+          ` (ámbitos: ${s.ambito} / ${t.ambito}; fuentes: ${s.fuente} / ${t.fuente})`;
+      }
       default:
         throw new Error(`Operación desconocida: ${ent.operacion}`);
     }
@@ -244,6 +278,7 @@ function frase(nombre, ent, SERIES) {
   if (nombre === "consultar_serie") return `Consultando ${n(ent.id)}` + (ent.desde || ent.hasta ? ` (${ent.desde || "inicio"} → ${ent.hasta || "último dato"})` : "");
   if (nombre === "calcular") {
     const op = { variacion: "variación interanual", variacion_periodo_anterior: "variación frente al periodo anterior",
+      comparar_rangos: "comparación entre periodos", proporcion: "peso sobre el total",
       ranking_mismo_mes: "comparación con el mismo mes de otros años", maximo_minimo: "máximos y mínimos", media: "media", suma: "total" }[ent.operacion] || ent.operacion;
     return `Calculando ${op}: ${n(ent.id)}`;
   }
@@ -303,6 +338,7 @@ async function responderAgente(client, pregunta, emitir) {
       tools: HERRAMIENTAS,
       messages,
     });
+    emitir({ tipo: "turno" });   // marca: si esta vuelta acaba en consulta, su texto se descarta
     stream.on("text", (t) => emitir({ tipo: "texto", texto: t }));
     let msg;
     try {
@@ -321,6 +357,8 @@ async function responderAgente(client, pregunta, emitir) {
     if (!usos.length) { avisoFinal(msg, emitir); return almacen.generado; }   // respuesta final
     if (msg.stop_reason === "max_tokens") throw new Error("respuesta truncada");
 
+    // El texto escrito antes de una consulta son notas de trabajo, no la respuesta.
+    if (msg.content.some((b) => b.type === "text" && b.text.trim())) emitir({ tipo: "descartar" });
     messages.push({ role: "assistant", content: msg.content });
     const resultados = usos.map((u) => {
       const ent = u.input && typeof u.input === "object" ? u.input : {};

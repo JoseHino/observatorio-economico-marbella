@@ -1266,7 +1266,7 @@ async function iaPedir(modo,pregunta,titulo){
   sal.scrollIntoView({behavior:'smooth',block:'start'});
   document.querySelectorAll('.ia-boton,#ia-enviar').forEach(b=>b.disabled=true);
   if(iaCtrl)iaCtrl.abort();iaCtrl=new AbortController();iaTexto='';
-  const t0=Date.now();let nPasos=0,fecha='';
+  const t0=Date.now();let nPasos=0,fecha='',marca=0;
   /* cada evento del agente: estado (lo que está haciendo), texto (la respuesta), fin o error */
   const paso=t=>{pasos.hidden=false;pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));
     pasos.insertAdjacentHTML('beforeend','<li class="vivo">'+escHtml(t)+'</li>');nPasos++;
@@ -1275,6 +1275,8 @@ async function iaPedir(modo,pregunta,titulo){
     if(ev.tipo==='estado')paso(ev.texto);
     else if(ev.tipo==='texto'){if(!iaTexto){pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));est.innerHTML='Redactando<span class="ia-puntos"></span>';}
       iaTexto+=ev.texto;tx.innerHTML=iaRender(iaTexto)+'<span class="ia-cursor"></span>';}
+    else if(ev.tipo==='turno')marca=iaTexto.length;
+    else if(ev.tipo==='descartar'){iaTexto=iaTexto.slice(0,marca);tx.innerHTML=iaRender(iaTexto);}
     else if(ev.tipo==='fin')fecha=ev.datos||'';
     else if(ev.tipo==='error')throw new Error(ev.texto);
   };
