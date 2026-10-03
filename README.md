@@ -84,3 +84,23 @@ después. Cotejado de enero de 2024 a agosto de 2026: el paro coincide en todos 
 contratos en el total (alguna diferencia de 1-2 entre categorías por revisiones). Argos no da el
 paro municipal por edad ni sector ni cubre España: eso sigue viniendo del SEPE, que además hace de
 respaldo si Argos no contesta.
+
+## Asistente de IA
+
+Pestaña **✦ Asistente IA**: notas de prensa, resúmenes y respuestas redactadas por Claude
+(Anthropic) **solo con las cifras del observatorio**.
+
+```
+fetch_data.py ──► data/contexto_ia.json   (21 hechos con cifra, periodo y fuente, ya calculados)
+                      │
+index.html ──POST──► worker/ (Cloudflare Worker) ──► API de Claude ──► texto en streaming
+```
+
+- `contexto_ia()` calcula en Python variaciones y récords frente al mismo mes de todos los
+  años (histórico de Argos desde 2006, `data/argos_historico.json`); la IA no calcula nada.
+- Las instrucciones y los encargos de los botones viven en el Worker, no en el navegador.
+- La clave es un secreto del Worker: `cd worker && npx wrangler secret put ANTHROPIC_API_KEY`.
+- Desplegar cambios del Worker: `cd worker && npx wrangler deploy`.
+- Protección: solo acepta peticiones desde la web del observatorio, 8 consultas/min por IP,
+  preguntas de hasta 600 caracteres. Conviene fijar además un límite de gasto en la consola
+  de Anthropic.

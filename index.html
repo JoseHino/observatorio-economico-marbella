@@ -93,6 +93,52 @@ section{display:none} section.active{display:block;animation:rise .4s var(--ease
 .kpi .d.bad{background:rgba(255,90,95,.13);color:var(--bad)}
 .spark{height:46px;margin-top:14px;position:relative}
 
+/* ---- asistente de IA ---- */
+nav button[data-s="asistente"]{color:#5a3ee0;font-weight:600}
+nav button[data-s="asistente"].active{background:linear-gradient(135deg,#5a3ee0,#0071e3);color:#fff}
+.ia-hero{background:radial-gradient(120% 140% at 0% 0%,rgba(90,62,224,.10),rgba(0,113,227,.06) 45%,transparent 75%);
+  border-radius:24px;padding:22px 24px 6px;margin-top:22px}
+.ia-badge{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.02em;padding:4px 11px;border-radius:980px;
+  background:linear-gradient(135deg,#5a3ee0,#0071e3);color:#fff}
+.ia-botones{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0 16px}
+.ia-boton{text-align:left;background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:14px 16px;cursor:pointer;
+  font:inherit;color:var(--ink);box-shadow:var(--shadow);transition:transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s}
+.ia-boton:hover:not(:disabled){transform:translateY(-2px);box-shadow:var(--shadow-lift);border-color:rgba(90,62,224,.35)}
+.ia-boton:disabled,.ia-enviar:disabled{opacity:.55;cursor:wait}
+.ia-bt{display:block;font-weight:600;font-size:14.5px;letter-spacing:-.01em}
+.ia-bd{display:block;color:var(--mut);font-size:12.5px;margin-top:3px}
+.ia-caja{display:flex;gap:10px;align-items:flex-end;background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  padding:10px 10px 10px 16px;box-shadow:var(--shadow)}
+.ia-caja:focus-within{border-color:rgba(90,62,224,.55);box-shadow:0 0 0 4px rgba(90,62,224,.10)}
+.ia-caja textarea{flex:1;border:0;outline:0;resize:vertical;min-height:46px;font:inherit;font-size:15.5px;color:var(--ink);background:transparent;padding:6px 0}
+.ia-enviar{border:0;border-radius:12px;padding:11px 18px;font:inherit;font-weight:600;font-size:14px;color:#fff;cursor:pointer;
+  background:linear-gradient(135deg,#5a3ee0,#0071e3);white-space:nowrap}
+.ia-ejemplos{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 4px}
+.ia-ej{background:none;border:1px dashed var(--line);border-radius:980px;padding:5px 12px;font:inherit;font-size:12.5px;color:var(--mut);cursor:pointer}
+.ia-ej:hover{color:var(--ink);border-color:rgba(90,62,224,.45)}
+.ia-salida{margin-top:22px;background:var(--surface);border:1px solid var(--hair);border-radius:22px;padding:22px 26px 18px;
+  box-shadow:var(--shadow-lift);scroll-margin-top:80px}
+.ia-cab{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap;padding-bottom:12px;
+  border-bottom:1px solid var(--hair);margin-bottom:14px;font-weight:600;font-size:15px}
+.ia-estado{font-weight:500;font-size:12.5px;color:#5a3ee0}
+.ia-estado.ok{color:var(--good)}
+.ia-texto{font-size:16px;line-height:1.65;color:var(--ink);max-width:820px}
+.ia-texto p{margin:0 0 12px} .ia-texto ul{margin:0 0 12px;padding-left:20px} .ia-texto li{margin:4px 0}
+.ia-cursor{display:inline-block;width:8px;height:1.1em;background:#5a3ee0;vertical-align:-3px;margin-left:2px;animation:iaBlink 1s steps(2) infinite}
+@keyframes iaBlink{50%{opacity:0}}
+.ia-puntos::after{content:'';animation:iaDots 1.4s infinite}
+@keyframes iaDots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+.ia-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ia-aviso{margin-top:14px;color:var(--faint);font-size:12px}
+.ia-error{color:var(--bad,#c62828)}
+.ia-datos{margin-top:22px;background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:12px 18px;font-size:13.5px;color:var(--ink2)}
+.ia-datos summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.ia-datos ul{margin:10px 0 4px;padding-left:18px} .ia-datos li{margin:6px 0;line-height:1.5}
+.ia-fuente{color:var(--faint);font-size:12px}
+.ia-promo{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:18px;padding:16px 20px;border-radius:18px;
+  background:linear-gradient(135deg,rgba(90,62,224,.09),rgba(0,113,227,.07));border:1px solid rgba(90,62,224,.18)}
+.ia-promo b{font-size:15.5px} .ia-promo span{color:var(--mut);font-size:13.5px}
+
 /* ---- accesos de la portada ---- */
 .jump{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:14px;margin-top:10px}
 .jump button{text-align:left;background:var(--surface);border:1px solid var(--hair);border-radius:18px;
@@ -147,6 +193,7 @@ footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-si
 
 <main class="wrap">
 <section id="resumen"></section>
+<section id="asistente"></section>
 <section id="laboral"></section>
 <section id="afiliacion"></section>
 <section id="contratacion"></section>
@@ -238,17 +285,18 @@ const baseOpts=(extra={})=>Object.assign({responsive:true,maintainAspectRatio:fa
 
 /* ---------- estructura ---------- */
 /* [id, etiqueta corta para la barra de navegación] */
-const SECTIONS=[['resumen','Resumen'],['laboral','Empleo'],['afiliacion','Afiliación'],
+const SECTIONS=[['resumen','Resumen'],['asistente','✦ Asistente IA'],['laboral','Empleo'],['afiliacion','Afiliación'],
  ['contratacion','Contratos'],['comparativa','Comparativa'],['turismo','Turismo'],
  ['empresas','Empresas'],['coyuntura','Precios'],['renta','Renta'],
  ['demografia','Población'],['vivienda','Vivienda']];
 /* nombre completo, para los accesos de la portada */
-const SEC_LONG={laboral:'Mercado laboral',afiliacion:'Afiliación a la Seguridad Social',
+const SEC_LONG={asistente:'✦ Asistente de análisis con IA',laboral:'Mercado laboral',afiliacion:'Afiliación a la Seguridad Social',
   contratacion:'Contratación',comparativa:'Comparativa territorial',turismo:'Turismo',
   empresas:'Tejido empresarial',coyuntura:'Precios y consumo',renta:'Renta y bienestar',
   demografia:'Demografía',vivienda:'Vivienda'};
 /* descripción corta de cada sección, para los accesos de la portada */
 const SEC_DESC={
+  asistente:'Notas de prensa, resúmenes y respuestas redactadas con los datos del observatorio.',
   laboral:'Paro registrado mensual (Argos-SAE y SEPE) por sexo, edad y sector.',
   afiliacion:'Afiliados a la Seguridad Social por régimen, con autónomos aparte.',
   contratacion:'Contratos firmados cada mes y calidad del empleo.',
@@ -338,7 +386,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -1151,9 +1199,94 @@ function EXTRA_ULT2(D){
     c_matric:A(ly(S.matriculaciones)),c_elec:A(ly(S.electricidad)),c_vehic:A(ly(S.vehiculos)),c_deuda:A(ly((D.deuda||{}).serie))};
 }
 
+/* ================= ASISTENTE DE IA =================
+   Envía la petición al Cloudflare Worker (worker/src/index.js), que lee la ficha
+   data/contexto_ia.json y pide el texto a Claude. La respuesta llega en streaming. */
+const IA_URL='https://observatorio-marbella-ia.josemariahf612.workers.dev';   /* Cloudflare Worker (worker/) */
+const IA_BOTONES=[
+  ['nota_paro','Nota de prensa: paro y contratos','El texto para difundir el dato del mes'],
+  ['resumen_concejal','Resumen para el concejal','Los puntos clave en un minuto'],
+  ['pymes','Pymes y autónomos','Tejido empresarial, empleo y consumo'],
+  ['turismo','Situación turística','Hoteles, mercados y viviendas turísticas'],
+  ['extranjeros','Población extranjera','Residentes, empleo y migraciones'],
+];
+const IA_EJEMPLOS=['¿Cómo ha evolucionado el paro en el último año?','Compara el turismo nacional y el internacional',
+  '¿Qué dicen los datos sobre el precio de la vivienda?','Escribe un tuit sobre el último dato de empleo'];
+let iaCtrl=null, iaTexto='';
+const escHtml=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* markdown mínimo: **negrita**, listas con guion y párrafos */
+function iaRender(t){
+  return escHtml(t).split(/\n{2,}/).map(b=>{
+    const ls=b.split('\n');
+    if(ls.every(l=>/^\s*[-•]\s+/.test(l)||!l.trim()))
+      return '<ul>'+ls.filter(l=>l.trim()).map(l=>'<li>'+l.replace(/^\s*[-•]\s+/,'')+'</li>').join('')+'</ul>';
+    return '<p>'+ls.join('<br>')+'</p>';
+  }).join('').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+}
+function buildAsistente(){
+  const el=document.getElementById('asistente');
+  const F=DATA.contexto_ia||{},hechos=F.hechos||[];
+  el.innerHTML='<div class="ia-hero"><div class="ia-badge">✦ Inteligencia artificial</div>'+
+   '<div class="h2" style="margin-top:10px">Asistente de análisis económico</div>'+
+   '<div class="pdesc">Pide un informe, una nota de prensa o una respuesta concreta. El asistente redacta <b>solo con los datos oficiales de este observatorio</b>'+(F.generado?' (actualizados el '+new Date(F.generado).toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})+')':'')+' y cita el periodo y la fuente de cada cifra.</div></div>'+
+   '<div class="ia-botones">'+IA_BOTONES.map(([m,t,d])=>'<button class="ia-boton" data-modo="'+m+'"><span class="ia-bt">'+t+'</span><span class="ia-bd">'+d+'</span></button>').join('')+'</div>'+
+   '<div class="ia-caja"><textarea id="ia-pregunta" maxlength="600" rows="2" placeholder="Escribe aquí lo que quieres saber… (por ejemplo: '+escHtml(IA_EJEMPLOS[0])+')"></textarea>'+
+   '<button id="ia-enviar" class="ia-enviar" title="Generar (Ctrl+Intro)">Generar ➜</button></div>'+
+   '<div class="ia-ejemplos">'+IA_EJEMPLOS.map(e=>'<button class="ia-ej">'+escHtml(e)+'</button>').join('')+'</div>'+
+   '<div id="ia-salida" class="ia-salida" hidden><div class="ia-cab"><span id="ia-titulo"></span><span id="ia-estado" class="ia-estado"></span></div>'+
+   '<div id="ia-texto" class="ia-texto"></div>'+
+   '<div class="ia-acciones" id="ia-acciones" hidden><button class="btn" id="ia-copiar">Copiar texto</button><button class="btn" id="ia-bajar">Descargar .txt</button><button class="btn" id="ia-otra">Nueva consulta</button></div>'+
+   '<div class="ia-aviso">Texto generado por IA (Claude, de Anthropic) a partir de los datos oficiales del observatorio. Revísalo antes de difundirlo.</div></div>'+
+   (hechos.length?'<details class="ia-datos"><summary>Ver los '+hechos.length+' datos que puede usar el asistente</summary><ul>'+
+     hechos.map(h=>'<li><b>'+escHtml(h.tema)+'</b> · '+escHtml(String(h.periodo))+' — '+escHtml(h.texto)+' <span class="ia-fuente">'+escHtml(h.fuente)+'</span></li>').join('')+'</ul></details>':'');
+  const ta=document.getElementById('ia-pregunta');
+  el.querySelectorAll('.ia-boton').forEach(b=>b.addEventListener('click',()=>iaPedir(b.dataset.modo,'',b.querySelector('.ia-bt').textContent)));
+  el.querySelectorAll('.ia-ej').forEach(b=>b.addEventListener('click',()=>{ta.value=b.textContent;ta.focus();}));
+  document.getElementById('ia-enviar').addEventListener('click',()=>{const q=ta.value.trim();if(q)iaPedir('libre',q,q);else ta.focus();});
+  ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();document.getElementById('ia-enviar').click();}});
+  document.getElementById('ia-copiar').addEventListener('click',async e=>{
+    try{await navigator.clipboard.writeText(iaTexto.replace(/\*\*/g,''));e.target.textContent='¡Copiado!';setTimeout(()=>e.target.textContent='Copiar texto',1600);}catch(_){}});
+  document.getElementById('ia-bajar').addEventListener('click',()=>{
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([iaTexto.replace(/\*\*/g,'')],{type:'text/plain;charset=utf-8'}));
+    a.download='observatorio-marbella-'+new Date().toISOString().slice(0,10)+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);});
+  document.getElementById('ia-otra').addEventListener('click',()=>{document.getElementById('ia-salida').hidden=true;ta.value='';ta.focus();});
+}
+async function iaPedir(modo,pregunta,titulo){
+  const sal=document.getElementById('ia-salida'),tx=document.getElementById('ia-texto'),est=document.getElementById('ia-estado'),acc=document.getElementById('ia-acciones');
+  sal.hidden=false;acc.hidden=true;document.getElementById('ia-titulo').textContent=titulo;
+  tx.innerHTML='<span class="ia-cursor"></span>';est.innerHTML='Analizando los datos<span class="ia-puntos"></span>';est.className='ia-estado';
+  sal.scrollIntoView({behavior:'smooth',block:'start'});
+  document.querySelectorAll('.ia-boton,#ia-enviar').forEach(b=>b.disabled=true);
+  if(iaCtrl)iaCtrl.abort();iaCtrl=new AbortController();iaTexto='';
+  try{
+    if(!IA_URL)throw new Error('El asistente todavía no está conectado a su servidor.');
+    const r=await fetch(IA_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({modo,pregunta}),signal:iaCtrl.signal});
+    if(!r.ok)throw new Error(await r.text()||('Error '+r.status));
+    est.textContent='Redactando…';
+    const rd=r.body.getReader(),dec=new TextDecoder();
+    for(;;){const{done,value}=await rd.read();if(done)break;
+      iaTexto+=dec.decode(value,{stream:true});tx.innerHTML=iaRender(iaTexto)+'<span class="ia-cursor"></span>';}
+    tx.innerHTML=iaRender(iaTexto);
+    const f=r.headers.get('X-Datos-Actualizados');
+    est.textContent='Listo'+(f?' · datos del '+new Date(f).toLocaleDateString('es-ES',{day:'numeric',month:'long'}):'');est.className='ia-estado ok';
+    acc.hidden=false;
+  }catch(e){
+    if(e.name==='AbortError')return;
+    tx.innerHTML='<p class="ia-error">'+escHtml(e.message||'No se ha podido generar el texto.')+'</p>';est.textContent='';
+  }finally{document.querySelectorAll('.ia-boton,#ia-enviar').forEach(b=>b.disabled=false);}
+}
+
+/* acceso destacado al asistente en la portada */
+function iaPromo(){
+  const k=document.querySelector('#resumen .kpis, #resumen .tiles, #resumen .grid');
+  const html='<div class="ia-promo"><div><b>✦ Pregunta a los datos</b><br><span>Pide una nota de prensa o un resumen de la situación económica de Marbella, redactado al momento con IA.</span></div>'+
+    '<button class="ia-enviar" id="ia-ir">Abrir el asistente ➜</button></div>';
+  if(k)k.insertAdjacentHTML('afterend',html);else document.getElementById('resumen').insertAdjacentHTML('beforeend',html);
+  document.getElementById('ia-ir').addEventListener('click',()=>{show('asistente');window.scrollTo({top:0,behavior:'smooth'});});
+}
 /* cada sección pinta lo suyo y después su ampliación con datos municipales */
 const both=(f,g)=>()=>{f();try{g();}catch(e){console.error(e);}};
-const BUILD={resumen:buildResumen,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
+const BUILD={resumen:both(buildResumen,iaPromo),asistente:buildAsistente,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));

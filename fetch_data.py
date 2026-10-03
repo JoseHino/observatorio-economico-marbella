@@ -82,7 +82,7 @@ def get_json(url):
 #
 # Regla ahora: un dato publicado no se sustituye NUNCA por nada. Si la fuente no
 # contesta, se conserva lo último bueno y se dice en el log.
-_SIN_GUARDIA = {"meta.json"}   # meta no tiene periodos: se reescribe siempre
+_SIN_GUARDIA = {"meta.json", "contexto_ia.json"}   # sin periodos propios: se reescriben siempre
 CONSERVADOS = []               # ficheros que esta pasada NO ha podido refrescar
 
 def _leer(name):
@@ -1392,6 +1392,257 @@ def deuda_viva():
           f"{round(s[-1]['v']/1e6, 1) if s else '—'} M€)")
     write("deuda.json", {"serie": s})
 
+# ------------------------------------- HISTÓRICO LARGO DE ARGOS (para récords)
+# Las notas de prensa del Ayuntamiento comparan con "el mismo mes desde 2007". El
+# panel solo guarda tres años, pero Argos da el paro de Marbella desde 2006 y los
+# contratos desde 2009 en una sola consulta: se guardan aparte para calcular récords.
+def argos_historico():
+    step("Histórico largo de paro y contratos · Argos (para comparar con todos los años)")
+    prev = _leer("argos_historico.json") or {}
+    hoy = datetime.date.today().year
+    data = {}
+    for clave, desde, idx in (("paro", 2006, 0), ("contratos", 2009, 1)):
+        try:
+            res = argos_marbella(desde, hoy)[idx]
+            serie = [{"t": t, "v": r["total"]} for t, r in sorted(res.items()) if r.get("total")]
+            data[clave] = _tmov_funde(serie, prev.get(clave))
+        except Exception as e:
+            print(f"    ! {clave}: {e}")
+            data[clave] = prev.get(clave) or []
+        s = data[clave]
+        print(f"    · {clave}: {len(s)} meses ({s[0]['t'] if s else '—'} → {s[-1]['t'] if s else '—'})")
+    write("argos_historico.json", data)
+
+# ------------------------------------- FICHA DE DATOS PARA EL ASISTENTE DE IA
+# El asistente del panel (Cloudflare Worker + Claude) NO calcula nada: recibe esta
+# ficha con las cifras ya calculadas aquí, en Python, y se le prohíbe usar números
+# que no estén en ella. Así una variación o un récord salen siempre de los datos y
+# nunca de la memoria del modelo.
+_MESES_NOM = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+              "septiembre", "octubre", "noviembre", "diciembre"]
+
+def _n(v, d=0):
+    """Número en formato español: 6246 → '6.246'; 10.18 → '10,2'."""
+    if v is None:
+        return "—"
+    s = f"{v:,.{d}f}"
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
+def _pct(a, b):
+    return (a - b) / b * 100 if a is not None and b else None
+
+def _var(a, b, unidad=""):
+    """'+383 (+6,5 %)' frente a un valor anterior."""
+    if a is None or b is None:
+        return "sin dato de comparación"
+    d, p = a - b, _pct(a, b)
+    return f"{'+' if d >= 0 else '−'}{_n(abs(d))}{unidad} ({'+' if p >= 0 else '−'}{_n(abs(p), 1)} %)"
+
+def _mes(t):
+    return f"{_MESES_NOM[int(t[5:7]) - 1]} de {t[:4]}"
+
+def _por_t(serie):
+    return {p["t"]: p for p in serie or [] if isinstance(p, dict) and p.get("t")}
+
+def _ultimo(serie):
+    s = [p for p in serie or [] if isinstance(p, dict)]
+    return s[-1] if s else None
+
+def _hace_un_anio(t):
+    return f"{int(t[:4]) - 1:04d}{t[4:]}"
+
+def _mes_anterior(t):
+    y, m = int(t[:4]), int(t[5:7]) - 1
+    return f"{y - (m == 0):04d}-{(m or 12):02d}"
+
+def _record_mismo_mes(serie, t, mejor="min"):
+    """Frase de récord del mes t frente al mismo mes de todos los años de la serie."""
+    m = t[5:7]
+    mismos = {p["t"][:4]: p["v"] for p in serie if p["t"][5:7] == m and p.get("v") is not None}
+    y = t[:4]
+    if y not in mismos or len(mismos) < 3:
+        return None
+    v = mismos[y]
+    anteriores = sorted((a for a in mismos if a < y), reverse=True)
+    mejor_que = (lambda x: x < v) if mejor == "min" else (lambda x: x > v)
+    for a in anteriores:
+        if mejor_que(mismos[a]):
+            if a == anteriores[0]:
+                return None          # el año pasado ya fue mejor: no hay récord
+            return (f"el {'menor' if mejor == 'min' else 'mayor'} dato de un mes de "
+                    f"{_MESES_NOM[int(m) - 1]} desde {a}, cuando hubo {_n(mismos[a])}")
+    return (f"el {'menor' if mejor == 'min' else 'mayor'} dato de un mes de "
+            f"{_MESES_NOM[int(m) - 1]} de toda la serie disponible (desde {min(mismos)})")
+
+def contexto_ia():
+    step("Ficha de datos para el asistente de IA")
+    L = lambda n: _leer(n) or {}
+    H = []           # hechos: {"tema", "periodo", "texto", "fuente"}
+
+    def hecho(tema, periodo, texto, fuente):
+        H.append({"tema": tema, "periodo": periodo, "texto": texto, "fuente": fuente})
+
+    # --- Paro y contratos (Argos/SEPE) ---
+    pm, hist = (L("paro_mensual.json").get("serie") or []), L("argos_historico.json")
+    up = _ultimo(pm)
+    if up:
+        t, P = up["t"], _por_t(pm)
+        ant, ia = P.get(_mes_anterior(t)), P.get(_hace_un_anio(t))
+        txt = (f"Paro registrado en Marbella en {_mes(t)}: {_n(up['total'])} personas "
+               f"({_n(up.get('hombres'))} hombres y {_n(up.get('mujeres'))} mujeres). "
+               f"Frente al mes anterior: {_var(up['total'], ant and ant['total'])}. "
+               f"Frente al mismo mes del año anterior: {_var(up['total'], ia and ia['total'])}.")
+        rec = _record_mismo_mes(hist.get("paro") or [], t, "min")
+        if rec:
+            txt += f" Es {rec}."
+        if up.get("sectores"):
+            s = up["sectores"]
+            txt += (f" Por sector: servicios {_n(s.get('servicios'))}, construcción "
+                    f"{_n(s.get('construccion'))}, industria {_n(s.get('industria'))}, "
+                    f"agricultura {_n(s.get('agricultura'))}, sin empleo anterior {_n(s.get('sin_empleo'))}.")
+        hecho("Paro registrado", t, txt, "Observatorio Argos (SAE) y SEPE")
+    cm = L("contratos_mensual.json").get("serie") or []
+    uc = _ultimo(cm)
+    if uc:
+        t, C = uc["t"], _por_t(cm)
+        ant, ia = C.get(_mes_anterior(t)), C.get(_hace_un_anio(t))
+        pi = uc["indefinidos"] / uc["total"] * 100 if uc.get("total") else None
+        txt = (f"Contratos registrados en Marbella en {_mes(t)}: {_n(uc['total'])}, de ellos "
+               f"{_n(uc.get('indefinidos'))} indefinidos ({_n(pi, 1)} %) y {_n(uc.get('temporales'))} temporales. "
+               f"Frente al mes anterior: {_var(uc['total'], ant and ant['total'])}. "
+               f"Frente al mismo mes del año anterior: {_var(uc['total'], ia and ia['total'])}.")
+        rec = _record_mismo_mes(hist.get("contratos") or [], t, "max")
+        if rec:
+            txt += f" Es {rec}."
+        se = uc.get("sectores") or {}
+        txt += f" Servicios concentra {_n(se.get('servicios'))} contratos y construcción {_n(se.get('construccion'))}."
+        hecho("Contratación", t, txt, "Observatorio Argos (SAE)")
+    pa = L("paro_anual.json").get("total")
+    if pa:
+        hecho("Paro medio anual", pa["y"], f"Paro registrado medio en Marbella en {pa['y']}: {_n(pa['v'])} personas.", "SEPE")
+
+    # --- Afiliación ---
+    af = ((L("afiliacion.json").get("marbella") or {}).get("total")) or []
+    af = [p for p in af if p.get("v") is not None]
+    if af:
+        u, A = af[-1], _por_t(af)
+        ia = A.get(_hace_un_anio(u["t"]))
+        hecho("Afiliación a la Seguridad Social", u["t"],
+              f"Afiliados a la Seguridad Social residentes en Marbella en {_mes(u['t'])}: {_n(u['v'])}. "
+              f"Frente al año anterior: {_var(u['v'], ia and ia['v'])}.", "IECA a partir de la TGSS")
+
+    # --- Españoles y extranjeros (SIMA, ECP) ---
+    S = L("sima.json")
+    for clave, nombre, extra in (("paro", "Paro medio anual por nacionalidad", ""),
+                                 ("contratos", "Contratos anuales por nacionalidad", ""),
+                                 ("afiliados", "Afiliación media anual por nacionalidad (lugar de trabajo en Marbella)", "")):
+        u = _ultimo(S.get(clave))
+        if u and u.get("total"):
+            hecho(nombre, u["y"],
+                  f"{nombre} en {u['y']}: total {_n(u['total'])}; españoles {_n(u.get('espanola'))}; "
+                  f"extranjeros {_n(u.get('extranjera'))} ({_n((u.get('extranjera') or 0) / u['total'] * 100, 1)} %).",
+                  "IECA · SIMA")
+    D = L("demografia.json")
+    R = D.get("residentes") or {}
+    ne, nx = _ultimo(R.get("nac_espanola")), _ultimo(R.get("nac_extranjera"))
+    if ne and nx:
+        tot = ne["v"] + nx["v"]
+        nb = _ultimo(R.get("nacidos_extranjero"))
+        hecho("Población", ne["y"],
+              f"Población residente en Marbella a 1 de enero de {ne['y']}: {_n(tot)} habitantes; "
+              f"{_n(nx['v'])} de nacionalidad extranjera ({_n(nx['v'] / tot * 100, 1)} %)"
+              + (f" y {_n(nb['v'])} nacidos fuera de España ({_n(nb['v'] / tot * 100, 1)} %)." if nb else "."),
+              "INE · Estadística Continua de Población")
+    M = D.get("migraciones") or {}
+    se, si = _ultimo(M.get("saldo_exterior")), _ultimo(M.get("saldo_interior"))
+    if se:
+        hecho("Migraciones", se["y"],
+              f"Saldo migratorio de Marbella en {se['y']}: {_n(se['v'])} con el extranjero"
+              + (f" y {_n(si['v'])} con el resto de España." if si else "."), "INE · Estadística de Migraciones")
+
+    # --- Turismo ---
+    T = L("turismo.json").get("hoteles") or {}
+    uv = _ultimo(T.get("viajeros"))
+    if uv:
+        t, V = uv["t"], _por_t(T.get("viajeros"))
+        ia = V.get(_hace_un_anio(t))
+        ex, es = _por_t(T.get("viajeros_ext")).get(t), _por_t(T.get("viajeros_esp")).get(t)
+        per, adr = _por_t(T.get("pernoctaciones")).get(t), _por_t(T.get("adr")).get(t)
+        oc = _por_t(T.get("ocup_plazas")).get(t)
+        txt = (f"Hoteles de Marbella en {_mes(t)}: {_n(uv['v'])} viajeros ({_var(uv['v'], ia and ia['v'])} interanual)")
+        if per: txt += f", {_n(per['v'])} pernoctaciones"
+        if ex and es: txt += f"; el {_n(ex['v'] / (ex['v'] + es['v']) * 100, 1)} % residentes en el extranjero"
+        if adr: txt += f"; tarifa media diaria (ADR) {_n(adr['v'], 1)} €"
+        if oc: txt += f"; ocupación por plazas {_n(oc['v'], 1)} %"
+        hecho("Turismo hotelero", t, txt + ".", "INE · Encuesta de Ocupación Hotelera")
+    TM = L("turismo_moviles.json")
+    it = (TM.get("internacional") or {}).get("total") or []
+    if len(it) >= 12:
+        paises = sorted(((n, sum(p["v"] for p in a[-12:])) for n, a in ((TM.get("internacional") or {}).get("paises") or {}).items()),
+                        key=lambda x: -x[1])[:5]
+        hecho("Turistas internacionales (todos los alojamientos)", it[-1]["t"],
+              f"Turistas extranjeros que pernoctaron en Marbella en los 12 meses hasta {_mes(it[-1]['t'])}: "
+              f"{_n(sum(p['v'] for p in it[-12:]))}. Principales países: "
+              + ", ".join(f"{n} ({_n(v)})" for n, v in paises) + ".",
+              "INE · turismo medido con teléfonos móviles (experimental)")
+    vf = _ultimo(S.get("vft"))
+    if vf and isinstance(vf.get("Viviendas con fines turísticos"), list):
+        v = vf["Viviendas con fines turísticos"]
+        hecho("Viviendas con fines turísticos", vf["y"],
+              f"Viviendas con fines turísticos inscritas en Marbella en {vf['y']}: {_n(v[0])}, con {_n(v[1])} plazas.",
+              "IECA · Registro de Turismo de Andalucía")
+
+    # --- Empresas y actividad ---
+    E = L("empresas.json")
+    ue = _ultimo(E.get("total"))
+    if ue:
+        prev = [p for p in E["total"] if p["y"] == ue["y"] - 1]
+        hecho("Empresas", ue["y"], f"Empresas activas en Marbella en {ue['y']}: {_n(ue['v'])} "
+              f"({_var(ue['v'], prev[0]['v'] if prev else None)} frente al año anterior).", "INE · DIRCE")
+    es_ = _ultimo(S.get("establecimientos"))
+    if es_ and es_.get("TOTAL"):
+        hecho("Establecimientos", es_["y"], f"Establecimientos con actividad económica en Marbella en {es_['y']}: {_n(es_['TOTAL'])}.",
+              "IECA · Directorio de establecimientos")
+    mt = _ultimo(S.get("matriculaciones"))
+    if mt:
+        tot = sum(mt.get(m.capitalize()) or 0 for m in _MESES_NOM)
+        hecho("Matriculaciones", mt["y"], f"Vehículos matriculados en Marbella en {mt['y']}: {_n(tot)}.", "IECA a partir de la DGT")
+
+    # --- Vivienda ---
+    VM = L("vivienda_marbella.json")
+    cv = (VM.get("compraventas") or {}).get("total") or []
+    if cv:
+        u, ia = cv[-1], (cv[-5] if len(cv) > 4 else None)
+        tr = f"{int(u['t'][5:7]) // 3}.º trimestre de {u['t'][:4]}"
+        hecho("Compraventa de vivienda", u["t"], f"Compraventas de vivienda en Marbella en el {tr}: {_n(u['v'])} "
+              f"({_var(u['v'], ia and ia['v'])} interanual).", "Ministerio de Vivienda (notarios)")
+    vt = (VM.get("valor_tasado") or {}).get("total") or []
+    if vt:
+        u, ia = vt[-1], (vt[-5] if len(vt) > 4 else None)
+        tr = f"{int(u['t'][5:7]) // 3}.º trimestre de {u['t'][:4]}"
+        hecho("Precio de la vivienda", u["t"], f"Valor tasado medio de la vivienda libre en Marbella en el {tr}: "
+              f"{_n(u['v'])} €/m² ({_var(u['v'], ia and ia['v'], ' €/m²')} interanual).", "Ministerio de Vivienda")
+    al = _ultimo((VM.get("alquiler") or {}).get("var_anual"))
+    if al:
+        hecho("Alquiler", al["y"], f"El precio del alquiler de vivienda en Marbella subió un {_n(al['v'], 1)} % en {al['y']}.",
+              "INE · Índice de Precios de Vivienda en Alquiler")
+
+    # --- Renta, precios y hacienda local ---
+    rn = _ultimo(L("renta.json").get("neta_persona"))
+    if rn:
+        hecho("Renta", rn["y"], f"Renta neta media por persona en Marbella en {rn['y']}: {_n(rn['v'])} €.", "INE · Atlas de distribución de renta")
+    ipc = _ultimo(((L("coyuntura.json").get("ipc")) or {}).get("var_anual"))
+    if ipc:
+        hecho("Precios", ipc["t"], f"Inflación anual en Andalucía en {_mes(ipc['t'])}: {_n(ipc['v'], 1)} %.", "INE · IPC")
+    dv = _ultimo(L("deuda.json").get("serie"))
+    if dv:
+        hecho("Deuda municipal", dv["y"], f"Deuda viva del Ayuntamiento de Marbella a 31 de diciembre de {dv['y']}: "
+              f"{_n(dv['v'] / 1e6, 1)} millones de euros.", "Ministerio de Hacienda")
+
+    data = {"generado": datetime.date.today().isoformat(), "municipio": "Marbella", "hechos": H}
+    print(f"    · {len(H)} hechos")
+    write("contexto_ia.json", data)
+
 # ---------------------------------------------------------------- VIGILANTE DE FRESCURA
 # Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
 # obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
@@ -1543,7 +1794,8 @@ def auditar_frescura():
     hoy = datetime.date.today()
     rep, alertas = {}, []
     for name in sorted(os.listdir(OUT)):
-        if not name.endswith(".json") or name in ("meta.json",):
+        # contexto_ia.json es un derivado (resumen para el asistente), no una fuente
+        if not name.endswith(".json") or name in ("meta.json", "contexto_ia.json"):
             continue
         try:
             obj = json.load(io.open(os.path.join(OUT, name), encoding="utf-8"))
@@ -1590,7 +1842,8 @@ def main():
     # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
     for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
                afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
-               turismo_moviles, deuda_viva):
+               turismo_moviles, deuda_viva, argos_historico,
+               contexto_ia):          # contexto_ia, el último: resume todo lo anterior
         try:
             fn()
         except Exception as e:

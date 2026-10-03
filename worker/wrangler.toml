@@ -1,0 +1,20 @@
+# Asistente de IA del Observatorio Económico de Marbella
+# Despliegue:   npx wrangler deploy
+# Clave:        npx wrangler secret put ANTHROPIC_API_KEY   (nunca en este fichero)
+name = "observatorio-marbella-ia"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 8 consultas por minuto y por IP: de sobra para una persona, y frena a quien
+# quisiera gastar la cuenta de la API en bucle.
+[[ratelimits]]
+name = "LIMITADOR"
+namespace_id = "2901"
+
+  [ratelimits.simple]
+  limit = 8
+  period = 60
+
+[observability]
+enabled = true
