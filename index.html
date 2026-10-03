@@ -1269,7 +1269,7 @@ async function iaPedir(modo,pregunta,titulo){
   const t0=Date.now();let nPasos=0,fecha='',marca=0;
   /* cada evento del agente: estado (lo que está haciendo), texto (la respuesta), fin o error */
   const paso=t=>{pasos.hidden=false;pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));
-    pasos.insertAdjacentHTML('beforeend','<li class="vivo">'+escHtml(t)+'</li>');nPasos++;
+    pasos.insertAdjacentHTML('beforeend','<li class="vivo">'+escHtml(t)+'</li>');if(/^(Buscando|Consultando|Calculando|Revisando)/.test(t))nPasos++;
     est.innerHTML=escHtml(t)+'<span class="ia-puntos"></span>';};
   const evento=ev=>{
     if(ev.tipo==='estado')paso(ev.texto);
@@ -1291,7 +1291,7 @@ async function iaPedir(modo,pregunta,titulo){
     if(buf.trim())evento(JSON.parse(buf));
     tx.innerHTML=iaRender(iaTexto);
     const seg=Math.round((Date.now()-t0)/1000);
-    est.textContent='Listo en '+seg+' s'+(modo==='libre'&&nPasos>1?' · '+(nPasos-1)+' consultas a los datos':'')+
+    est.textContent='Listo en '+seg+' s'+(modo==='libre'&&nPasos?' · '+nPasos+(nPasos===1?' consulta':' consultas')+' a los datos':'')+
       (fecha?' · datos del '+new Date(fecha).toLocaleDateString('es-ES',{day:'numeric',month:'long'}):'');
     est.className='ia-estado ok';pasos.querySelectorAll('li.vivo').forEach(li=>li.classList.remove('vivo'));
     acc.hidden=false;
