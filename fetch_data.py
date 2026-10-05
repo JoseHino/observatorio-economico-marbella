@@ -1873,6 +1873,15 @@ def series_ia():
     add("ipc_andalucia", "Inflación anual (IPC) · Andalucía", "%", "mensual", "INE · IPC", (C.get("ipc") or {}).get("var_anual"), ambito="Andalucía")
     add("ipc_espana", "Inflación anual (IPC) · España", "%", "mensual", "INE · IPC", (C.get("ipc") or {}).get("var_anual_es"), ambito="España")
     add("comercio_minorista_andalucia", "Ventas del comercio minorista, variación anual · Andalucía", "%", "mensual", "INE · ICM", (C.get("icm") or {}).get("var_anual"), ambito="Andalucía")
+    F = [r for r in L("formacion.json").get("anual") or [] if r.get("estado") == "cerrado"]
+    DEL = "Ayuntamiento de Marbella · Delegación de Empleo"
+    for k, n, u in (("acciones", "Acciones formativas de la Delegación de Empleo", "cursos"),
+                    ("plazas", "Plazas ofertadas en los cursos de formación municipales", "plazas"),
+                    ("solicitudes", "Solicitudes a los cursos de formación municipales", "solicitudes"),
+                    ("finalizan", "Alumnos que finalizan los cursos de formación municipales", "alumnos"),
+                    ("horas_rec", "Horas de formación recibidas en los cursos municipales", "horas")):
+        add(f"formacion_{k}", n, u, "anual", DEL, [{"y": r["y"], "v": r.get(k)} for r in F],
+            ambito="Ayuntamiento de Marbella", claves="formación cursos empleo delegación")
     add("deuda_viva", "Deuda viva del Ayuntamiento a 31 de diciembre", "€", "anual", "Ministerio de Hacienda", L("deuda.json").get("serie"), ambito="Ayuntamiento de Marbella")
 
     print(f"    · {len(S)} series")
@@ -1914,6 +1923,9 @@ _FRESCURA_MAX = {
     "turismo_moviles.json": 14,
     # deuda.json: Hacienda publica el 31-12 del año N a mediados de N+1
     "deuda.json": 20,
+    # formacion.json: registro de la Delegación de Empleo, cargado A MANO con
+    # formacion_excel.py (no lo toca esta Action); avisa si pasa año y medio sin cargar
+    "formacion.json": 18,
 }
 
 # Excepciones POR SERIE dentro de un fichero. Hacen falta cuando en el mismo JSON

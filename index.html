@@ -177,6 +177,17 @@ select.btn{appearance:auto;border-radius:10px}
 .note{color:var(--ink2);font-size:13.5px;background:var(--surface);border:1px solid var(--hair);
   border-radius:16px;padding:13px 16px;margin-bottom:18px;box-shadow:var(--shadow)}
 
+/* ---- tabla de cursos ---- */
+.tscroll{overflow-x:auto;margin:0 -4px;padding:0 4px}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+.tbl th{text-align:right;font-weight:600;color:var(--mut);font-size:12px;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{text-align:right;padding:7px 10px;border-bottom:1px solid var(--hair);white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child,.tbl th:nth-child(2),.tbl td:nth-child(2),.tbl th:nth-child(3){text-align:left}
+.tbl td:first-child{white-space:normal;min-width:220px;color:var(--ink)}
+.tbl td:nth-child(2){color:var(--mut)}
+.tbl tr:hover td{background:var(--tint)}
+.barra{display:inline-block;height:6px;border-radius:3px;background:var(--teal);vertical-align:middle;margin-right:6px;opacity:.75}
+
 footer{border-top:1px solid var(--hair);background:var(--tint);color:var(--faint);font-size:13px;line-height:1.65}
 footer .wrap{padding-top:26px;padding-bottom:44px}
 footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-size:12px}
@@ -203,6 +214,7 @@ footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-si
 <section id="laboral"></section>
 <section id="afiliacion"></section>
 <section id="contratacion"></section>
+<section id="formacion"></section>
 <section id="comparativa"></section>
 <section id="turismo"></section>
 <section id="empresas"></section>
@@ -292,12 +304,12 @@ const baseOpts=(extra={})=>Object.assign({responsive:true,maintainAspectRatio:fa
 /* ---------- estructura ---------- */
 /* [id, etiqueta corta para la barra de navegación] */
 const SECTIONS=[['resumen','Resumen'],['asistente','✦ Asistente IA'],['laboral','Empleo'],['afiliacion','Afiliación'],
- ['contratacion','Contratos'],['comparativa','Comparativa'],['turismo','Turismo'],
+ ['contratacion','Contratos'],['formacion','Formación'],['comparativa','Comparativa'],['turismo','Turismo'],
  ['empresas','Empresas'],['coyuntura','Precios'],['renta','Renta'],
  ['demografia','Población'],['vivienda','Vivienda']];
 /* nombre completo, para los accesos de la portada */
 const SEC_LONG={asistente:'✦ Asistente de análisis con IA',laboral:'Mercado laboral',afiliacion:'Afiliación a la Seguridad Social',
-  contratacion:'Contratación',comparativa:'Comparativa territorial',turismo:'Turismo',
+  contratacion:'Contratación',formacion:'Formación para el empleo',comparativa:'Comparativa territorial',turismo:'Turismo',
   empresas:'Tejido empresarial',coyuntura:'Precios y consumo',renta:'Renta y bienestar',
   demografia:'Demografía',vivienda:'Vivienda'};
 /* descripción corta de cada sección, para los accesos de la portada */
@@ -306,6 +318,7 @@ const SEC_DESC={
   laboral:'Paro registrado mensual (Argos-SAE y SEPE) por sexo, edad y sector.',
   afiliacion:'Afiliados a la Seguridad Social por régimen, con autónomos aparte.',
   contratacion:'Contratos firmados cada mes y calidad del empleo.',
+  formacion:'Cursos de la Delegación de Empleo: plazas, demanda, alumnos y áreas.',
   comparativa:'Marbella frente a Málaga, Andalucía y España.',
   turismo:'Viajeros, ocupación y rentabilidad hotelera.',
   empresas:'Empresas activas por rama y sociedades creadas.',
@@ -325,7 +338,7 @@ function card(id,title,sub,tag,src,full){
     '<div class="cs"><span class="tag '+(tag==='live'?'live':'stat')+'">'+(tag==='live'?'DINÁMICO':'ANUAL')+'</span>'+sub+
     '<span class="cult" id="cult-'+id+'"></span></div>'+
     '<div class="cwrap"><canvas id="'+id+'"></canvas></div>'+
-    '<div class="src">Fuente: <a href="'+src[1]+'" target="_blank" rel="noopener">'+src[0]+'</a></div></div>';
+    '<div class="src">Fuente: '+(src[1]?'<a href="'+src[1]+'" target="_blank" rel="noopener">'+src[0]+'</a>':src[0])+'</div></div>';
 }
 /* ---------- periodicidad + último dato por gráfico ---------- */
 const TRIM={ '03':'1T','06':'2T','09':'3T','12':'4T' };
@@ -369,7 +382,7 @@ function CARD_ULT(){
     c_soc:M(socT), c_soc_saldo:M(socT),
     c_renta:AN(renY), c_renta_uc:AN(renY), c_pobreza:AN(renY),
     c_pob:AN(demY), c_nac:AN(demYatlas), c_edad:AN(demYatlas),
-    ...EXTRA_ULT(D), ...EXTRA_ULT2(D),
+    ...EXTRA_ULT(D), ...EXTRA_ULT2(D), ...EXTRA_ULT3(D),
     c_compraventa:M(cvT), c_ipv:TR(ipvT), c_ipv_var:TR(ipvT),
     c_hipo:M(hipT), c_hipo_imp:M(hipT),
     c_ipc_var:M(ipcT), c_ipc_idx:M(ipcT), c_icm_var:M(icmT), c_icm_idx:M(icmT),
@@ -392,7 +405,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -1205,6 +1218,205 @@ function EXTRA_ULT2(D){
     c_matric:A(ly(S.matriculaciones)),c_elec:A(ly(S.electricidad)),c_vehic:A(ly(S.vehiculos)),c_deuda:A(ly((D.deuda||{}).serie))};
 }
 
+/* ================= FORMACIÓN PARA EL EMPLEO =================
+   No hay fuente abierta: es el registro que lleva la Delegación de Empleo del
+   Ayuntamiento (Excel del indicador SEGITTUR GOB02_05_01). formacion_excel.py lo
+   vuelca a data/formacion.json; se ejecuta a mano cuando llega el Excel nuevo.
+   Los totales anuales son los de la hoja DATOS (cifras oficiales de la Delegación);
+   los desgloses por modalidad, área y curso salen de la hoja de cursos. */
+const SRC_FORM=['Ayuntamiento de Marbella · Delegación de Empleo, registro de acciones formativas',''];
+const FO_AREAS=['Competencias digitales y ofimática','Comercio electrónico y marketing','Gestión de empresa','Idiomas',
+  'Hostelería y alimentación','Jardinería y mantenimiento','Seguridad, PRL y logística','Atención al cliente y servicios'];
+const foAnual=()=>((DATA.formacion||{}).anual)||[];
+const foCursos=()=>((DATA.formacion||{}).cursos)||[];
+const foCerrados=()=>foAnual().filter(r=>r.finalizan!=null);
+const foLbl=r=>r.estado==='en curso'?r.y+' (prog.)':String(r.y);
+const sumBy=(arr,k)=>arr.reduce((s,x)=>s+(x[k]||0),0);
+const corta=(t,n)=>t.length>n?t.slice(0,n-1)+'…':t;
+/* cursos agrupados por nombre normalizado (varias ediciones = un curso) */
+function foAgrupa(cs){
+  const m={};
+  cs.forEach(x=>{const g=m[x.clave]||(m[x.clave]={curso:x.curso,area:x.area,mods:new Set(),ed:0,horas:x.horas,plazas:0,solicitudes:0,finalizan:0,plazasCierre:0,y:x.y});
+    g.ed++;g.mods.add(x.modalidad);g.plazas+=x.plazas||0;
+    if(x.y>=g.y){g.curso=x.curso;g.y=x.y;g.horas=x.horas;}
+    if(x.solicitudes!=null)g.solicitudes+=x.solicitudes;
+    if(x.finalizan!=null){g.finalizan+=x.finalizan;g.plazasCierre+=x.plazas||0;}});
+  return Object.values(m);
+}
+
+function buildFormacion(){
+  const el=document.getElementById('formacion');
+  const A=foAnual(),C=foCursos(),CE=foCerrados();
+  if(!A.length){el.innerHTML='<div class="h2">Formación para el empleo</div><div class="note">No se han podido cargar los datos de formación.</div>';return;}
+  const L=last(CE),P=CE.length>1?CE[CE.length-2]:null,prog=A.find(r=>r.estado==='en curso');
+  const d=k=>P&&L[k]!=null&&P[k]!=null?pct(L[k],P[k]):null;
+  const K=(v,l,k,extra)=>{const dd=d(k);let[dt,dc]=deltaTxt(dd);if(dd!=null&&Math.abs(dd)<1)dc='';   /* ±1 %: estable, sin color */
+    return kpi(v,l+(extra?'<br><span style="color:var(--faint)">'+extra+'</span>':''),dt,dc);};
+  const tasa=r=>r.plazas&&r.finalizan!=null?r.finalizan/r.plazas*100:null;
+  const ratio=r=>r.plazas&&r.solicitudes!=null?r.solicitudes/r.plazas:null;
+  const ySol=[...new Set(C.filter(x=>x.solicitudes!=null).map(x=>x.y))].sort();
+  const ySolTxt=ySol.length?ySol[0]+'-'+last(ySol):'';
+
+  el.innerHTML='<div class="h2">Formación para el empleo</div>'+
+   '<div class="pdesc">Cursos gratuitos que organiza la Delegación de Empleo del Ayuntamiento para personas desempleadas, trabajadores y empresas de Marbella: cuántos se ofrecen, cuánta gente los pide, cuántos alumnos los terminan y de qué temas son.</div>'+
+   '<div class="cs" style="margin-bottom:10px">'+geoTag('Ayuntamiento de Marbella')+'Último año cerrado: <b>'+L.y+'</b>, comparado con '+(P?P.y:'el anterior')+'.</div>'+
+   '<div class="kpis">'+
+    K(fmt(L.acciones),'Acciones formativas · '+L.y,'acciones',fmt(L.acc_tele)+' de teleformación')+
+    K(fmt(L.plazas),'Plazas ofertadas · '+L.y,'plazas')+
+    K(fmt(L.solicitudes),'Solicitudes · '+L.y,'solicitudes',ratio(L)!=null?fmt(ratio(L),2)+' por plaza':'')+
+    K(fmt(L.finalizan),'Alumnos que finalizan · '+L.y,'finalizan',tasa(L)!=null?fmt(tasa(L),0)+' % de las plazas':'')+
+    K(fmt(L.horas_rec),'Horas de formación recibidas · '+L.y,'horas_rec',L.horas_of?fmt(L.horas_rec/L.horas_of*100,0)+' % de las ofertadas':'')+
+   '</div>'+
+   (prog?'<div class="note"><b>'+prog.y+', en curso.</b> La programación prevé <b>'+fmt(prog.acciones)+'</b> acciones formativas ('+fmt(prog.acc_tele)+' de teleformación), <b>'+fmt(prog.plazas)+'</b> plazas y <b>'+fmt(prog.horas_of)+'</b> horas de formación. Solicitudes, alumnos y horas recibidas se incorporan al cerrar el año.</div>':'')+
+   '<div class="grid">'+
+    card('c_fo_acc','Acciones formativas por modalidad',geoTag('Marbella')+'Cursos organizados cada año'+nota('Anual. El año en curso es programación.'),'stat',SRC_FORM)+
+    card('c_fo_emb','Plazas, solicitudes y alumnos que finalizan',geoTag('Marbella')+'Del curso ofertado al alumno formado'+nota('Anual. 2021 no tiene cierre registrado y 2022 no registra solicitudes.'),'stat',SRC_FORM)+
+    card('c_fo_tasa','Tasa de finalización por modalidad',geoTag('Marbella')+'Alumnos que terminan el curso por cada 100 plazas ofertadas'+nota('Anual. El total es el de la Delegación; el desglose por modalidad se calcula curso a curso.'),'stat',SRC_FORM)+
+    card('c_fo_dem','Demanda: solicitudes por plaza',geoTag('Marbella')+'Por encima de 1 hay más candidatos que plazas'+nota('Anual. Solo años con solicitudes registradas.'),'stat',SRC_FORM)+
+    card('c_fo_horas','Horas de formación ofertadas y recibidas',geoTag('Marbella')+'Plazas × horas de cada curso, y lo realmente cursado'+nota('Anual. Horas recibidas = alumnos que finalizan × horas del curso.'),'stat',SRC_FORM)+
+    card('c_fo_area_dem','Demanda por área temática',geoTag('Marbella')+'Solicitudes por plaza, todo el histórico ('+ySolTxt+')'+nota('Áreas asignadas por el observatorio a partir del nombre del curso. 2021 y 2022 no registran solicitudes.'),'stat',SRC_FORM)+
+    card('c_fo_area','Plazas ofertadas por área temática',geoTag('Marbella')+'Qué se enseña: plazas de cada área por año'+nota('Anual. Suma curso a curso; puede diferir ligeramente del total de la Delegación.'),'stat',SRC_FORM,true)+
+    card('c_fo_area_fin','Alumnos que finalizan por área temática',geoTag('Marbella')+'Qué se ha aprendido: alumnos formados en cada área, año a año'+nota('Anual. Suma curso a curso; 2021 no tiene cierre registrado.'),'stat',SRC_FORM,true)+
+    card('c_fo_top','Los cursos más demandados',geoTag('Marbella')+'Solicitudes por plaza de cada curso, sumando todas sus ediciones ('+ySolTxt+')'+nota('Solo cursos con al menos 30 plazas en todo el periodo. El color es el de su área temática.'),'stat',SRC_FORM,true)+
+   '</div>'+
+   '<div class="h2" style="margin-top:34px">Cursos de cada año</div>'+
+   '<div class="pdesc">Detalle curso a curso. Las ediciones repetidas de un mismo curso se suman.</div>'+
+   '<div class="card full"><div class="toolbar" style="margin-bottom:10px"><label for="fo-anio" style="font-size:13.5px;color:var(--mut)">Año</label><select class="btn" id="fo-anio">'+
+     [...new Set(C.map(x=>x.y))].sort((a,b)=>b-a).map(y=>'<option value="'+y+'"'+(y===L.y?' selected':'')+'>'+y+(prog&&y===prog.y?' (programación)':'')+'</option>').join('')+
+   '</select><span id="fo-resumen" style="font-size:13px;color:var(--faint)"></span></div><div class="tscroll" id="fo-tabla"></div>'+
+   '<div class="src">Fuente: '+SRC_FORM[0]+'</div></div>'+
+   foEmpleoHtml();
+
+  /* 1 · modalidad */
+  charts.foacc=new Chart(c('c_fo_acc'),{type:'bar',data:{labels:A.map(foLbl),datasets:[
+    {label:'Presencial o mixta',data:A.map(r=>r.acc_presencial),backgroundColor:hexA(COL.c1,.85),stack:'m',borderRadius:2},
+    {label:'Teleformación',data:A.map(r=>r.acc_tele),backgroundColor:hexA(COL.c4,.85),stack:'m',borderRadius:2}]},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{footer:it=>'Total: '+fmt(it.reduce((s,x)=>s+x.parsed.y,0))}}},
+      scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
+  /* 2 · embudo */
+  charts.foemb=new Chart(c('c_fo_emb'),{type:'bar',data:{labels:A.map(foLbl),datasets:[
+    {label:'Plazas ofertadas',data:A.map(r=>r.plazas),backgroundColor:hexA(COL.c1,.85),borderRadius:3},
+    {label:'Solicitudes',data:A.map(r=>r.solicitudes),backgroundColor:hexA(COL.c3,.85),borderRadius:3},
+    {label:'Alumnos que finalizan',data:A.map(r=>r.finalizan),backgroundColor:hexA(COL.c4,.85),borderRadius:3}]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY()}})});
+  /* 3 · finalización por modalidad */
+  const tasaMod=(y,mod)=>{const cs=C.filter(x=>x.y===y&&x.finalizan!=null&&x.plazas&&(!mod||x.modalidad===mod));
+    const pl=sumBy(cs,'plazas');return pl&&cs.length>=2?+(sumBy(cs,'finalizan')/pl*100).toFixed(1):null;};
+  charts.fotasa=new Chart(c('c_fo_tasa'),{type:'line',data:{labels:CE.map(r=>r.y),datasets:[
+    Object.assign(ds('Total',CE.map(r=>+tasa(r).toFixed(1)),'#1d1d1f'),{borderWidth:2.6,pointRadius:3,tension:0}),
+    Object.assign(ds('Presencial o mixta',CE.map(r=>tasaMod(r.y,'Presencial o mixta')),COL.c1),{pointRadius:3,tension:0}),
+    Object.assign(ds('Teleformación',CE.map(r=>tasaMod(r.y,'Teleformación')),COL.c4),{pointRadius:3,tension:0})]},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt(x.parsed.y,1)+' %'}}},
+      scales:{x:{grid:{display:false}},y:Object.assign(axY(v=>v+' %'),{min:0,suggestedMax:100})}})});
+  /* 4 · demanda */
+  const DM=CE.filter(r=>r.solicitudes!=null);
+  charts.fodem=new Chart(c('c_fo_dem'),{type:'bar',data:{labels:DM.map(r=>r.y),datasets:[
+    {label:'Solicitudes por plaza',data:DM.map(r=>+ratio(r).toFixed(2)),backgroundColor:DM.map(r=>hexA(ratio(r)>=1?COL.c3:COL.mut,.85)),borderRadius:4,maxBarThickness:64},
+    Object.assign(dsRef('Una solicitud por plaza',DM.map(()=>1),'#6e6e73'),{type:'line',pointRadius:0})]},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt(x.parsed.y,2)}}},
+      scales:{x:{grid:{display:false}},y:Object.assign(axY(v=>fmt(v,1)),{min:0})}})});
+  /* 5 · horas */
+  const HR=A.filter(r=>r.horas_of!=null);
+  charts.fohoras=new Chart(c('c_fo_horas'),{type:'bar',data:{labels:HR.map(foLbl),datasets:[
+    {label:'Horas ofertadas',data:HR.map(r=>r.horas_of),backgroundColor:hexA(COL.c1,.3),borderRadius:3},
+    {label:'Horas recibidas',data:HR.map(r=>r.horas_rec),backgroundColor:hexA(COL.c1,.9),borderRadius:3}]},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{footer:it=>{const r=HR[it[0].dataIndex];
+      return r.horas_rec!=null&&r.horas_of?'Aprovechamiento: '+fmt(r.horas_rec/r.horas_of*100,0)+' %':'';}}}},
+      scales:{x:{grid:{display:false}},y:axY()}})});
+  /* 6 · demanda por área (últimos tres años con solicitudes) */
+  const ar=FO_AREAS.map(a=>{const cs=C.filter(x=>x.area===a&&ySol.includes(x.y)&&x.solicitudes!=null&&x.plazas);
+    const pl=sumBy(cs,'plazas');return{a,pl,r:pl?sumBy(cs,'solicitudes')/pl:null};}).filter(x=>x.pl>=30).sort((p,q)=>q.r-p.r);
+  charts.foareadem=new Chart(c('c_fo_area_dem'),{type:'bar',data:{labels:ar.map(x=>x.a),datasets:[
+    {label:'Solicitudes por plaza',data:ar.map(x=>+x.r.toFixed(2)),backgroundColor:ar.map(x=>hexA(PAL[FO_AREAS.indexOf(x.a)],.85)),borderRadius:5,maxBarThickness:26}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:x=>fmt(x.parsed.x,2)+' solicitudes por plaza ('+fmt(ar[x.dataIndex].pl)+' plazas)'}}},
+      scales:{x:Object.assign(axY(v=>fmt(v,1)),{min:0}),y:{grid:{display:false},ticks:{callback:function(v){return corta(this.getLabelForValue(v),40);}}}}}});
+  /* 7 · plazas por área */
+  const yrsC=[...new Set(C.map(x=>x.y))].sort();
+  const lblC=y=>prog&&y===prog.y?y+' (prog.)':String(y);
+  charts.foarea=new Chart(c('c_fo_area'),{type:'bar',data:{labels:yrsC.map(lblC),datasets:FO_AREAS.map((a,i)=>({label:a,
+    data:yrsC.map(y=>sumBy(C.filter(x=>x.y===y&&x.area===a),'plazas')||null),backgroundColor:hexA(PAL[i],.85),stack:'a'}))},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
+  /* 7b · alumnos que finalizan por área */
+  const yrsF=yrsC.filter(y=>C.some(x=>x.y===y&&x.finalizan!=null));
+  charts.foareafin=new Chart(c('c_fo_area_fin'),{type:'bar',data:{labels:yrsF.map(String),datasets:FO_AREAS.map((a,i)=>({label:a,
+    data:yrsF.map(y=>sumBy(C.filter(x=>x.y===y&&x.area===a),'finalizan')||null),backgroundColor:hexA(PAL[i],.85),stack:'f'}))},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{footer:it=>'Total: '+fmt(it.reduce((s,x)=>s+x.parsed.y,0))}}},
+      scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
+  /* 8 · cursos más demandados */
+  const top=foAgrupa(C.filter(x=>ySol.includes(x.y)&&x.solicitudes!=null)).filter(g=>g.plazas>=30)
+    .map(g=>Object.assign(g,{r:g.solicitudes/g.plazas})).sort((p,q)=>q.r-p.r).slice(0,12);
+  charts.fotop=new Chart(c('c_fo_top'),{type:'bar',data:{labels:top.map(g=>g.curso),datasets:[
+    {label:'Solicitudes por plaza',data:top.map(g=>+g.r.toFixed(2)),backgroundColor:top.map(g=>hexA(PAL[FO_AREAS.indexOf(g.area)],.85)),borderRadius:5,maxBarThickness:22}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{title:it=>top[it[0].dataIndex].curso,label:x=>{const g=top[x.dataIndex];
+        return[fmt(g.r,2)+' solicitudes por plaza',fmt(g.solicitudes)+' solicitudes · '+fmt(g.plazas)+' plazas · '+g.ed+(g.ed===1?' edición':' ediciones'),g.area];}}}},
+      scales:{x:Object.assign(axY(v=>fmt(v,1)),{min:0}),y:{grid:{display:false},ticks:{callback:function(v){return corta(this.getLabelForValue(v),46);}}}}}});
+  c('c_fo_top').parentNode.style.height='440px';
+  foEmpleoCharts();
+
+  const sel=document.getElementById('fo-anio');
+  sel.addEventListener('change',()=>foTabla(+sel.value));
+  foTabla(+sel.value);
+}
+
+function foTabla(y){
+  const cs=foCursos().filter(x=>x.y===y),G=foAgrupa(cs).sort((p,q)=>(q.solicitudes-p.solicitudes)||(q.plazas-p.plazas));
+  const cierre=cs.some(x=>x.finalizan!=null),sol=cs.some(x=>x.solicitudes!=null);
+  const maxS=Math.max(1,...G.map(g=>g.solicitudes||0));
+  document.getElementById('fo-resumen').textContent=fmt(G.length)+' cursos distintos · '+fmt(cs.length)+' ediciones · '+fmt(sumBy(cs,'plazas'))+' plazas'+(cierre?'':' · sin cierre todavía');
+  document.getElementById('fo-tabla').innerHTML='<table class="tbl"><thead><tr><th>Curso</th><th>Área</th><th>Modalidad</th><th>Ediciones</th><th>Horas</th><th>Plazas</th>'+
+    (sol?'<th>Solicitudes</th><th>Solic./plaza</th>':'')+(cierre?'<th>Finalizan</th><th>% finaliza</th>':'')+'</tr></thead><tbody>'+
+    G.map(g=>'<tr><td>'+escHtml(g.curso)+'</td><td>'+escHtml(g.area)+'</td><td style="text-align:left;color:var(--mut)">'+[...g.mods].join(' / ')+'</td><td>'+g.ed+'</td><td>'+fmt(g.horas)+'</td><td>'+fmt(g.plazas)+'</td>'+
+      (sol?'<td><span class="barra" style="width:'+Math.round((g.solicitudes||0)/maxS*60)+'px"></span>'+fmt(g.solicitudes)+'</td><td>'+(g.plazas?fmt(g.solicitudes/g.plazas,2):'—')+'</td>':'')+
+      (cierre?'<td>'+fmt(g.finalizan)+'</td><td>'+(g.plazasCierre?fmt(g.finalizan/g.plazasCierre*100,0)+' %':'—')+'</td>':'')+'</tr>').join('')+
+    '</tbody></table>';
+}
+
+/* Intermediación: portal y feria de empleo, y presupuesto (solo los años registrados) */
+function foEmpleoHtml(){
+  const A=foAnual(),ult=k=>{const r=A.filter(x=>x[k]!=null);return[last(r),r.length>1?r[r.length-2]:null];};
+  const K=(k,l)=>{const[a,b]=ult(k);if(!a)return'';const[dt,dc]=deltaTxt(b?pct(a[k],b[k]):null);return kpi(fmt(a[k]),l+' · '+a.y,dt?dt.replace('año ant.',b.y):'',dc);};
+  const pr=A.filter(r=>r.presupuesto!=null);
+  return '<div class="h2" style="margin-top:34px">Intermediación laboral</div>'+
+   '<div class="pdesc">Otras actuaciones de la Delegación de Empleo para poner en contacto a empresas y demandantes.</div>'+
+   '<div class="kpis">'+K('ofertas_portal','Ofertas publicadas en el Portal de Empleo')+K('feria_empresas','Empresas y entidades en la Feria de Empleo')+K('feria_asistentes','Asistentes a la Feria de Empleo')+'</div>'+
+   '<div class="grid">'+
+    card('c_fo_portal','Ofertas publicadas en el Portal de Empleo',geoTag('Marbella')+'Ofertas de trabajo difundidas por la Delegación'+nota('Anual. Solo los años registrados por la Delegación.'),'stat',SRC_FORM)+
+    card('c_fo_feria','Feria de Empleo: asistentes',geoTag('Marbella')+'Personas que acuden a la feria cada año'+nota('Anual. Solo los años registrados por la Delegación.'),'stat',SRC_FORM)+
+    card('c_fo_feria_emp','Feria de Empleo: empresas y entidades',geoTag('Marbella')+'Organizaciones participantes'+nota('Anual. Solo los años registrados por la Delegación.'),'stat',SRC_FORM)+
+    (pr.length?card('c_fo_presu','Presupuesto de formación',geoTag('Ayuntamiento de Marbella')+'Euros presupuestados y ejecutados'+nota('Anual. La Delegación solo registra el importe de '+pr.map(r=>r.y).join(' y ')+'.'),'stat',SRC_FORM):'')+
+   '</div>'+
+   (pr.length?'<div class="note" style="margin-top:18px">Presupuesto de formación registrado solo en '+pr.map(r=>r.y).join(' y ')+': '+pr.map(r=>'<b>'+r.y+'</b>, '+fmt(r.presupuesto)+' € presupuestados y '+fmt(r.ejecutado)+' € ejecutados ('+fmt(r.ejecutado/r.presupuesto*100,0)+' %)'+(r.finalizan?', unos '+fmt(r.ejecutado/r.finalizan)+' € por alumno que finaliza':'')).join('; ')+'. Para los años siguientes la Delegación no ha registrado el importe.</div>':'')+
+   '';
+}
+/* serie de cada indicador, del primer al último año con dato (los huecos quedan visibles) */
+function foRango(k){const A=foAnual(),i=A.findIndex(r=>r[k]!=null);if(i<0)return[];let j=A.length-1;while(A[j][k]==null)j--;return A.slice(i,j+1);}
+function foEmpleoCharts(){
+  const bar=(id,k,col,lbl)=>{const R=foRango(k);if(!R.length||!c(id))return;
+    charts['fo_'+k]=new Chart(c(id),{type:'bar',data:{labels:R.map(r=>r.y),datasets:[{label:lbl,data:R.map(r=>r[k]),backgroundColor:hexA(col,.85),borderRadius:4,maxBarThickness:64}]},
+      options:baseOpts({plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>x.parsed.y==null?'Sin dato':fmt(x.parsed.y)+' '+lbl.toLowerCase()}}},scales:{x:{grid:{display:false}},y:Object.assign(axY(),{min:0})}})});};
+  bar('c_fo_portal','ofertas_portal',COL.c1,'Ofertas');
+  bar('c_fo_feria','feria_asistentes',COL.c4,'Asistentes');
+  bar('c_fo_feria_emp','feria_empresas',COL.c5,'Empresas y entidades');
+  const P=foRango('presupuesto');
+  if(P.length&&c('c_fo_presu'))charts.fopresu=new Chart(c('c_fo_presu'),{type:'bar',data:{labels:P.map(r=>r.y),datasets:[
+    {label:'Presupuestado',data:P.map(r=>r.presupuesto),backgroundColor:hexA(COL.c3,.35),borderRadius:4,maxBarThickness:64},
+    {label:'Ejecutado',data:P.map(r=>r.ejecutado),backgroundColor:hexA(COL.c3,.9),borderRadius:4,maxBarThickness:64}]},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt(x.parsed.y)+' €',
+      footer:it=>{const r=P[it[0].dataIndex];return r.ejecutado!=null&&r.presupuesto?'Ejecución: '+fmt(r.ejecutado/r.presupuesto*100,0)+' %':'';}}}},
+      scales:{x:{grid:{display:false}},y:axY(v=>abbr(v)+' €')}})});
+}
+
+function EXTRA_ULT3(D){
+  const A=((D.formacion||{}).anual)||[];if(!A.length)return{};
+  const lc=(A.filter(r=>r.finalizan!=null).pop()||{}).y,la=last(A).y,sol=(A.filter(r=>r.solicitudes!=null).pop()||{}).y;
+  const N=y=>['anual',y??null];
+  return {c_fo_acc:N(la),c_fo_emb:N(lc),c_fo_tasa:N(lc),c_fo_dem:N(sol),c_fo_horas:N(lc),c_fo_area_dem:N(sol),c_fo_area:N(la),c_fo_area_fin:N(lc),c_fo_top:N(sol),
+    c_fo_portal:N((A.filter(r=>r.ofertas_portal!=null).pop()||{}).y),c_fo_feria:N((A.filter(r=>r.feria_asistentes!=null).pop()||{}).y),
+    c_fo_feria_emp:N((A.filter(r=>r.feria_empresas!=null).pop()||{}).y),c_fo_presu:N((A.filter(r=>r.presupuesto!=null).pop()||{}).y)};
+}
+
 /* ================= ASISTENTE DE IA =================
    Envía la petición al Cloudflare Worker (worker/src/index.js), que lee la ficha
    data/contexto_ia.json y pide el texto a Claude. La respuesta llega en streaming. */
@@ -1311,7 +1523,7 @@ function iaPromo(){
 }
 /* cada sección pinta lo suyo y después su ampliación con datos municipales */
 const both=(f,g)=>()=>{f();try{g();}catch(e){console.error(e);}};
-const BUILD={resumen:both(buildResumen,iaPromo),asistente:buildAsistente,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
+const BUILD={resumen:both(buildResumen,iaPromo),asistente:buildAsistente,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),formacion:buildFormacion,comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));
