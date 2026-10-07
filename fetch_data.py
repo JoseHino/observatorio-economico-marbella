@@ -1887,6 +1887,171 @@ def series_ia():
     print(f"    · {len(S)} series")
     write("series_ia.json", {"generado": datetime.date.today().isoformat(), "series": S})
 
+# ---------------------------------------------------------------- ÍNDICE DE TENSIÓN ECONÓMICA
+# Un solo número mensual que resume si la economía de Marbella está en crisis.
+# Cada componente se convierte en una SEÑAL comparable con el mismo mes del año
+# anterior (así se quita la estacionalidad, enorme en una ciudad turística), se
+# orienta para que positivo = peor, y se mide en desviaciones respecto a su
+# comportamiento habitual desde 2006 (z robusta: mediana y MAD, recortada entre
+# -2 y +3: que la covid no aplaste el resto de la serie y que el rebote de 2021,
+# puro efecto base, no se lea como un auge). El índice es la media
+# ponderada de las z disponibles, llevada a una escala 0-100 con 50 = normal:
+#     ITEM = 50 + 10 · Σ(w_i · z_i) / Σ(w_i disponibles)
+# Umbrales: < 45 expansión · 45-55 normalidad · 55-65 tensión · ≥ 65 crisis.
+# Dos series externas, del BCE, completan el entorno: el Euríbor a 12 meses
+# (crédito e hipotecas) y la libra frente al euro (poder de compra del cliente
+# británico, primer mercado extranjero de Marbella).
+ECB = "https://data-api.ecb.europa.eu/service/data/"
+CRISIS_COMP = [
+    # id, nombre, bloque, peso, serie, transformación, signo (+1: subir es peor), ámbito
+    ("paro", "Paro registrado", "Empleo", 10, "paro_historico", "yoy", +1, "Marbella"),
+    ("paro_nivel", "Paro por encima de su mínimo de 5 años", "Empleo", 10, "paro_historico", "sobre_min", +1, "Marbella"),
+    ("contratos", "Contratos firmados (suma de 3 meses)", "Empleo", 8, "contratos_historico", "yoy3", -1, "Marbella"),
+    ("afiliados", "Afiliados a la Seguridad Social", "Empleo", 7, "afiliados_total", "yoy", -1, "Marbella"),
+    ("afiliados_nivel", "Afiliación por debajo de su máximo de 5 años", "Empleo", 5, "afiliados_total", "bajo_max", +1, "Marbella"),
+    ("ocupacion", "Ocupación hotelera por plazas", "Turismo", 10, "hotel_ocup_plazas", "dif", -1, "Marbella"),
+    ("personal_hotel", "Personal empleado en hoteles", "Turismo", 10, "hotel_personal", "yoy", -1, "Marbella"),
+    ("sociedades", "Sociedades mercantiles creadas (suma de 3 meses)", "Empresas", 10, "sociedades_constituidas", "yoy3", -1, "provincia de Málaga"),
+    ("compraventas", "Compraventas de vivienda", "Vivienda y crédito", 8, "compraventas_total", "yoy", -1, "Marbella"),
+    ("hipotecas", "Hipotecas sobre viviendas (suma de 3 meses)", "Vivienda y crédito", 7, "hipotecas_provincia", "yoy3", -1, "provincia de Málaga"),
+    ("ipc", "Inflación por encima del 2 %", "Entorno", 5, "ipc_andalucia", "nivel2", +1, "Andalucía"),
+    ("euribor", "Euríbor a 12 meses", "Entorno", 5, "euribor_12m", "dif", +1, "zona euro"),
+    ("libra", "Euros más caros para el británico (GBP por EUR)", "Entorno", 5, "gbp_eur", "yoy", +1, "zona euro"),
+]
+CRISIS_UNIDAD = {"yoy": "% interanual", "yoy3": "% interanual", "dif": "dif. interanual", "nivel2": "p.p. sobre el 2 %",
+                 "sobre_min": "% sobre el mínimo", "bajo_max": "% bajo el máximo"}
+
+def _ecb_mensual(clave):
+    txt = _get(ECB + clave + "?format=csvdata&startPeriod=2005-01").decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(txt)))
+    return [{"t": r["TIME_PERIOD"], "v": round(float(r["OBS_VALUE"]), 4)} for r in rows if r.get("OBS_VALUE")]
+
+def _mes_mas(t, n):
+    a, m = int(t[:4]), int(t[5:7]) - 1 + n
+    return f"{a + m // 12:04d}-{m % 12 + 1:02d}"
+
+def _mensualiza(puntos, frecuencia):
+    """{'AAAA-MM': v}. Lo trimestral (fechado en el último mes) se reparte a sus tres meses."""
+    out = {}
+    for t, v in puntos:
+        if v is None or len(t) != 7:
+            continue
+        out[t] = v
+    if frecuencia == "trimestral" or (out and all(t[5:7] in ("03", "06", "09", "12") for t in list(out)[:8])):
+        for t, v in sorted(out.items()):
+            for k in (1, 2):
+                out.setdefault(_mes_mas(t, -k), v)
+    return out
+
+def _senal(s, tr):
+    out = {}
+    if tr in ("sobre_min", "bajo_max"):
+        # PROFUNDIDAD de la crisis: la variación interanual se normaliza aunque el paro
+        # siga altísimo (2011-2013); esto mide la distancia de la media de 12 meses a su
+        # mejor valor de los cinco años anteriores.
+        ma = {}
+        for t in s:
+            v = [s.get(_mes_mas(t, -k)) for k in range(12)]
+            if None not in v:
+                ma[t] = sum(v) / 12
+        for t, v in ma.items():
+            ven = [ma[x] for x in (_mes_mas(t, -k) for k in range(60)) if x in ma]
+            if len(ven) < 24:
+                continue
+            out[t] = 100 * (v / min(ven) - 1) if tr == "sobre_min" else 100 * (1 - v / max(ven))
+        return out
+    for t, v in s.items():
+        p = _mes_mas(t, -12)
+        if tr == "nivel2":
+            out[t] = v - 2
+        elif tr == "dif" and p in s:
+            out[t] = v - s[p]
+        elif tr == "yoy" and s.get(p):
+            out[t] = 100 * (v / s[p] - 1)
+        elif tr == "yoy3":
+            a = [s.get(_mes_mas(t, -k)) for k in range(3)]
+            b = [s.get(_mes_mas(p, -k)) for k in range(3)]
+            if None not in a and None not in b and sum(b):
+                out[t] = 100 * (sum(a) / sum(b) - 1)
+    return out
+
+def indice_crisis():
+    step("Índice de Tensión Económica de Marbella")
+    prev = _leer("crisis.json") or {}
+    ext = prev.get("externas") or {}
+    for sid, clave in (("euribor_12m", "FM/M.U2.EUR.RT.MM.EURIBOR1YD_.HSTA"), ("gbp_eur", "EXR/M.GBP.EUR.SP00.A")):
+        try:
+            ext[sid] = _ecb_mensual(clave)
+        except Exception as e:
+            print(f"    ⟲ BCE {sid}: {e}; se conserva lo publicado")
+    S = (_leer("series_ia.json") or {}).get("series") or {}
+    fuentes = {k: (v.get("puntos"), v.get("frecuencia")) for k, v in S.items()}
+    for sid, pts in ext.items():
+        fuentes[sid] = ([[p["t"], p["v"]] for p in pts], "mensual")
+
+    comps, Z = [], {}
+    for cid, nombre, bloque, peso, sid, tr, signo, ambito in CRISIS_COMP:
+        pts, freq = fuentes.get(sid, (None, None))
+        if not pts:
+            print(f"    · sin datos para {cid} ({sid})")
+            continue
+        sen = _senal(_mensualiza(pts, freq), tr)
+        if len(sen) < 36:
+            continue
+        vals = sorted(sen.values())
+        med = vals[len(vals) // 2]
+        mad = sorted(abs(x - med) for x in vals)[len(vals) // 2] * 1.4826 or 1
+        Z[cid] = {t: max(-2, min(3, signo * (v - med) / mad)) for t, v in sen.items()}
+        ult = max(sen)
+        comps.append({"id": cid, "nombre": nombre, "bloque": bloque, "peso": peso, "serie": sid,
+                      "ambito": ambito, "unidad": CRISIS_UNIDAD[tr], "signo": signo,
+                      "mediana": round(med, 2), "ultimo": {"t": ult, "senal": round(sen[ult], 2),
+                                                           "z": round(Z[cid][ult], 2)},
+                      "senal": [{"t": t, "v": round(sen[t], 2)} for t in sorted(sen) if t >= "2006-01"]})
+
+    peso_total = sum(c["peso"] for c in comps)
+    meses = sorted({t for z in Z.values() for t in z if t >= "2006-01"})
+    serie = []
+    for t in meses:
+        disp = [c for c in comps if t in Z[c["id"]]]
+        w = sum(c["peso"] for c in disp)
+        if w < 0.5 * peso_total:          # menos de la mitad del peso: no se publica ese mes
+            continue
+        comp = sum(c["peso"] * Z[c["id"]][t] for c in disp) / w
+        bloques = {}
+        for c in disp:
+            b = bloques.setdefault(c["bloque"], [0, 0])
+            b[0] += c["peso"] * Z[c["id"]][t]; b[1] += c["peso"]
+        serie.append({"t": t, "v": round(50 + 10 * comp, 1), "cobertura": round(100 * w / peso_total),
+                      "aporte": {c["id"]: round(10 * c["peso"] * Z[c["id"]][t] / w, 2) for c in disp},
+                      "bloques": {k: round(50 + 10 * a / p, 1) for k, (a, p) in bloques.items()}})
+    for i, r in enumerate(serie):           # tendencia: media móvil de 3 meses
+        ven = [x["v"] for x in serie[max(0, i - 2):i + 1]]
+        r["m3"] = round(sum(ven) / len(ven), 1)
+    print(f"    · {len(comps)} componentes, {len(serie)} meses; último {serie[-1]['t'] if serie else '—'}"
+          f" = {serie[-1]['v'] if serie else '—'}")
+    write("crisis.json", {"generado": datetime.date.today().isoformat(),
+                          "formula": "ITEM = 50 + 10 · Σ(w·z) / Σw",
+                          "umbrales": {"expansion": 45, "tension": 55, "crisis": 65},
+                          "componentes": comps, "serie": serie, "externas": ext})
+    # y al almacén del asistente de IA, para que pueda contestar por el índice
+    sia = _leer("series_ia.json")
+    if sia and serie:
+        sia["series"]["indice_tension_economica"] = {
+            "nombre": "Índice de Tensión Económica de Marbella (ITEM)", "unidad": "puntos (50 = normal)",
+            "frecuencia": "mensual", "ambito": "Marbella", "fuente": "Elaboración propia del observatorio",
+            "nota": "Índice sintético de crisis: < 45 expansión, 45-55 normalidad, 55-65 tensión, ≥ 65 crisis. "
+                    "Combina paro, contratos, afiliación, ocupación y empleo hotelero, sociedades, compraventas, "
+                    "hipotecas, IPC, Euríbor y libra/euro.",
+            "claves": "crisis recesión termómetro tensión índice sintético",
+            "puntos": [[r["t"], r["v"]] for r in serie]}
+        for sid, nombre, u in (("euribor_12m", "Euríbor a 12 meses", "%"), ("gbp_eur", "Libras esterlinas por euro", "GBP")):
+            if ext.get(sid):
+                sia["series"][sid] = {"nombre": nombre, "unidad": u, "frecuencia": "mensual", "ambito": "zona euro",
+                                      "fuente": "Banco Central Europeo", "nota": "", "claves": "",
+                                      "puntos": [[p["t"], p["v"]] for p in ext[sid]]}
+        write("series_ia.json", sia)
+
 # ---------------------------------------------------------------- VIGILANTE DE FRESCURA
 # Desfase máximo tolerado (en meses) antes de avisar de que un indicador se ha quedado
 # obsoleto. Sirve para cazar "series muertas" del INE (que renumera y congela códigos)
@@ -2090,7 +2255,8 @@ def main():
     for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
                afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
                turismo_moviles, deuda_viva, argos_historico,
-               contexto_ia, series_ia):   # los dos últimos: resumen todo lo anterior para la IA
+               contexto_ia, series_ia,    # resumen todo lo anterior para la IA
+               indice_crisis):            # lee series_ia.json
         try:
             fn()
         except Exception as e:

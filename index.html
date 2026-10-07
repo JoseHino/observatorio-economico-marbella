@@ -211,6 +211,7 @@ footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-si
 <main class="wrap">
 <section id="resumen"></section>
 <section id="asistente"></section>
+<section id="crisis"></section>
 <section id="laboral"></section>
 <section id="afiliacion"></section>
 <section id="contratacion"></section>
@@ -303,17 +304,18 @@ const baseOpts=(extra={})=>Object.assign({responsive:true,maintainAspectRatio:fa
 
 /* ---------- estructura ---------- */
 /* [id, etiqueta corta para la barra de navegación] */
-const SECTIONS=[['resumen','Resumen'],['asistente','✦ Asistente IA'],['laboral','Empleo'],['afiliacion','Afiliación'],
+const SECTIONS=[['resumen','Resumen'],['asistente','✦ Asistente IA'],['crisis','Termómetro'],['laboral','Empleo'],['afiliacion','Afiliación'],
  ['contratacion','Contratos'],['formacion','Formación'],['comparativa','Comparativa'],['turismo','Turismo'],
  ['empresas','Empresas'],['coyuntura','Precios'],['renta','Renta'],
  ['demografia','Población'],['vivienda','Vivienda']];
 /* nombre completo, para los accesos de la portada */
-const SEC_LONG={asistente:'✦ Asistente de análisis con IA',laboral:'Mercado laboral',afiliacion:'Afiliación a la Seguridad Social',
+const SEC_LONG={asistente:'✦ Asistente de análisis con IA',crisis:'Termómetro de crisis',laboral:'Mercado laboral',afiliacion:'Afiliación a la Seguridad Social',
   contratacion:'Contratación',formacion:'Formación para el empleo',comparativa:'Comparativa territorial',turismo:'Turismo',
   empresas:'Tejido empresarial',coyuntura:'Precios y consumo',renta:'Renta y bienestar',
   demografia:'Demografía',vivienda:'Vivienda'};
 /* descripción corta de cada sección, para los accesos de la portada */
 const SEC_DESC={
+  crisis:'Un índice que resume en una cifra si la economía local está en expansión, en tensión o en crisis.',
   asistente:'Notas de prensa, resúmenes y respuestas redactadas con los datos del observatorio.',
   laboral:'Paro registrado mensual (Argos-SAE y SEPE) por sexo, edad y sector.',
   afiliacion:'Afiliados a la Seguridad Social por régimen, con autónomos aparte.',
@@ -405,7 +407,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -887,6 +889,74 @@ function doughnut(id,segsRaw){const segs=segsRaw.filter(x=>x[1]!=null);new Chart
 function barCat(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:76}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.y)+' '+unit}}},scales:{x:{grid:{display:false}},y:axY()}}});}
 function barCatH(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
 
+
+/* ================= TERMÓMETRO DE CRISIS =================
+   Índice de Tensión Económica de Marbella (ITEM), calculado en fetch_data.py
+   (indice_crisis): 50 = normalidad; cada 10 puntos, una desviación típica. */
+const CRI_EST=[[65,'Crisis','#d93a3f'],[55,'Tensión','#f0a020'],[45,'Normalidad','#8e8e93'],[-1,'Expansión','#30b56a']];
+const criEstado=v=>CRI_EST.find(e=>v>=e[0]);
+const SRC_CRI=['Elaboración propia con INE, IECA, Argos-SAE, MIVAU y BCE',''];
+/* bandas de fondo del gráfico (expansión / normalidad / tensión / crisis) */
+const criBandas={id:'criBandas',beforeDatasetsDraw(ch){const{ctx,chartArea:a,scales:{y}}=ch;if(!a)return;
+  [[0,45,'rgba(48,181,106,.08)'],[55,65,'rgba(240,160,32,.10)'],[65,100,'rgba(217,58,63,.09)']].forEach(([lo,hi,col])=>{
+    const t=Math.max(a.top,y.getPixelForValue(hi)),b=Math.min(a.bottom,y.getPixelForValue(lo));
+    if(b>t){ctx.save();ctx.fillStyle=col;ctx.fillRect(a.left,t,a.right-a.left,b-t);ctx.restore();}});}};
+function buildCrisis(){
+  const el=document.getElementById('crisis');
+  const D=DATA.crisis||{};const S=D.serie||[],K=D.componentes||[];
+  if(!S.length){el.innerHTML='<div class="h2">Termómetro de crisis</div><div class="note">Sin datos todavía.</div>';return;}
+  /* titular: último mes con al menos el 80 % del peso; los posteriores son avance */
+  let iF=S.length-1;while(iF>0&&S[iF].cobertura<80)iF--;
+  const L=S[iF],A=S[S.length-1],P=S.find(x=>x.t===(+L.t.slice(0,4)-1)+L.t.slice(4));
+  const e=criEstado(L.v),eA=criEstado(A.v);
+  const k=[kpi('<span style="color:'+e[2]+'">'+fmt(L.v,1)+'</span>','Índice · '+lblMes(L.t)+' · <b>'+e[1]+'</b>','',''),
+    kpi(fmt(L.m3,1),'Tendencia (media de 3 meses)','',''),
+    P?kpi((L.v-P.v>0?'+':'')+fmt(L.v-P.v,1),'Puntos frente a '+lblMes(P.t),L.v>P.v?'▲ más tensión':'▼ menos tensión',L.v>P.v?'bad':'good'):'',
+    A!==L?kpi(fmt(A.v,1),'Avance · '+lblMes(A.t)+' ('+A.cobertura+' % de los datos)',eA[1],''):''];
+  const nom=Object.fromEntries(K.map(x=>[x.id,x]));
+  const filas=K.map(x=>{const z=x.ultimo.z;const col=z>0.5?COL.c2:(z<-0.5?'#30b56a':'#8e8e93');
+    return '<tr><td>'+x.nombre+'</td><td>'+x.bloque+'</td><td style="text-align:left">'+x.ambito+'</td><td>'+x.peso+'</td><td>'+lblMes(x.ultimo.t)+'</td>'+
+      '<td>'+fmt(x.ultimo.senal,1)+' <span style="color:var(--faint)">'+x.unidad+'</span></td><td>'+fmt(x.mediana,1)+'</td>'+
+      '<td style="color:'+col+';font-weight:600">'+(z>0?'+':'')+fmt(z,2)+'</td></tr>';}).join('');
+  el.innerHTML='<div class="h2">Termómetro de crisis</div>'+
+   '<div class="pdesc">El <b>Índice de Tensión Económica de Marbella (ITEM)</b> resume en una sola cifra mensual '+K.length+' indicadores de empleo, turismo, empresas, vivienda y entorno financiero. '+
+   '<b>50 es un mes normal</b>; por encima, la economía local se tensa; desde <b>65</b>, el cuadro es de crisis, como en 2008-2009 o en la covid. Cada 10 puntos equivalen a una desviación típica respecto al comportamiento habitual de Marbella desde 2006.</div>'+
+   '<div class="kpis">'+k.join('')+'</div>'+
+   '<div class="grid">'+
+    card('c_cri_serie','Índice de Tensión Económica, 2006-'+A.t.slice(0,4),'Verde: expansión (&lt; 45) · gris: normalidad · ámbar: tensión (55-65) · rojo: crisis (≥ 65)'+nota('Mensual. Los meses con menos del 50 % de los datos no se calculan; los últimos, con datos parciales, son un avance que se completa al publicarse el resto.'),'live',SRC_CRI,true)+
+    card('c_cri_bloq','Por bloques · '+lblMes(L.t),'Índice parcial de cada bloque, misma escala (50 = normal)','live',SRC_CRI)+
+    card('c_cri_aport','Qué empuja el índice · '+lblMes(L.t),'Puntos que suma (rojo) o resta (verde) cada indicador respecto a 50','live',SRC_CRI)+
+   '</div>'+
+   '<div class="card full" style="margin-top:18px"><h3>Componentes y última lectura</h3>'+
+    '<div class="cs">La <b>señal</b> compara con el mismo mes del año anterior (para quitar la estacionalidad turística); la <b>z</b> mide cuántas desviaciones típicas se aparta de su mediana histórica, con signo positivo cuando es malo.</div>'+
+    '<div class="tscroll"><table class="tbl"><thead><tr><th>Indicador</th><th>Bloque</th><th>Ámbito</th><th>Peso</th><th>Último dato</th><th>Señal</th><th>Mediana</th><th>z</th></tr></thead><tbody>'+filas+'</tbody></table></div></div>'+
+   '<div class="note" style="margin-top:18px"><b>Cómo se calcula.</b> '+
+    'ITEM = 50 + 10 · Σ(w<sub>i</sub> · z<sub>i</sub>) / Σ w<sub>i</sub>, con z<sub>i</sub> = signo · (señal − mediana) / (1,4826 · MAD), recortada entre −2 y +3. '+
+    'La mediana y la MAD (desviación absoluta mediana) se calculan sobre toda la historia del indicador, así que una covid no deforma la escala. '+
+    'El recorte asimétrico impide que los rebotes por efecto base (2021) se lean como un auge. '+
+    'Además de la evolución interanual se mide la <b>profundidad</b>: cuánto está el paro por encima, y la afiliación por debajo, de su mejor nivel de los cinco años anteriores; así se ve la crisis larga de 2010-2013 aunque el paro ya no creciera. '+
+    'Del <b>Banco Central Europeo</b> se añaden el Euríbor a 12 meses (precio del crédito y las hipotecas) y el cambio libra/euro (poder de compra del cliente británico, primer mercado extranjero de Marbella). '+
+    'Las sociedades mercantiles y las hipotecas son de la provincia de Málaga, y el IPC de Andalucía, porque no se publican por municipio. Es un indicador sintético propio del observatorio, no una estadística oficial.</div>';
+  charts.criSerie=new Chart(c('c_cri_serie'),{type:'line',plugins:[criBandas],
+    data:{labels:S.map(x=>lblMes(x.t)),datasets:[
+      Object.assign(ds('Índice mensual',S.map(x=>x.v),'#4a4a4f'),{borderWidth:1.2,borderColor:'rgba(74,74,79,.45)'}),
+      Object.assign(ds('Tendencia (3 meses)',S.map(x=>x.m3),COL.c1),{borderWidth:2.6,
+        segment:{borderColor:cx=>criEstado(cx.p1.parsed.y)[2]}})]},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{afterBody:it=>{const r=S[it[0].dataIndex];return criEstado(r.v)[1]+' · '+r.cobertura+' % de los datos';}}}},
+      scales:{x:axMes,y:Object.assign(axY(v=>fmt(v,0)),{suggestedMin:25,suggestedMax:75})}})});
+  const B=Object.entries(L.bloques||{});
+  charts.criBloq=new Chart(c('c_cri_bloq'),{type:'bar',data:{labels:B.map(b=>b[0]),datasets:[{data:B.map(b=>+(b[1]-50).toFixed(1)),
+      backgroundColor:B.map(b=>hexA(criEstado(b[1])[2],.85)),borderRadius:6,maxBarThickness:30}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:x=>'Índice del bloque: '+fmt(x.parsed.x+50,1)}}},
+      scales:{x:Object.assign(axY(v=>fmt(v+50,0)),{suggestedMin:-20,suggestedMax:20}),y:{grid:{display:false}}}}});
+  const Ap=Object.entries(L.aporte||{}).sort((a,b)=>b[1]-a[1]);
+  charts.criAport=new Chart(c('c_cri_aport'),{type:'bar',data:{labels:Ap.map(a=>(nom[a[0]]||{}).nombre||a[0]),
+      datasets:[{data:Ap.map(a=>a[1]),backgroundColor:Ap.map(a=>a[1]>0?hexA(COL.c2,.85):hexA('#30b56a',.85)),borderRadius:5,maxBarThickness:22}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:x=>(x.parsed.x>0?'+':'')+fmt(x.parsed.x,2)+' puntos'}}},
+      scales:{x:axY(v=>fmt(v,1)),y:{grid:{display:false},ticks:{font:{size:11}}}}}});
+}
 /* ---------- navegación ---------- */
 /* ================= AMPLIACIÓN · DATOS ESPECÍFICOS DE MARBELLA =================
    Españoles / extranjeros (población, migraciones, paro, contratos, afiliación),
@@ -1523,7 +1593,7 @@ function iaPromo(){
 }
 /* cada sección pinta lo suyo y después su ampliación con datos municipales */
 const both=(f,g)=>()=>{f();try{g();}catch(e){console.error(e);}};
-const BUILD={resumen:both(buildResumen,iaPromo),asistente:buildAsistente,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),formacion:buildFormacion,comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
+const BUILD={resumen:both(buildResumen,iaPromo),asistente:buildAsistente,crisis:buildCrisis,laboral:both(buildLaboral,extraLaboral),afiliacion:both(buildAfiliacion,extraAfiliacion),contratacion:both(buildContr,extraContr),formacion:buildFormacion,comparativa:buildComparativa,turismo:both(buildTurismo,()=>{extraTurismo();extraTurismo2();}),empresas:both(buildEmpresas,extraEmpresas),coyuntura:both(buildCoyuntura,extraCoyuntura),renta:buildRenta,demografia:both(buildDemografia,extraDemografia),vivienda:both(buildVivienda,extraVivienda)};
 function show(id){
   document.querySelectorAll('section').forEach(s=>s.classList.toggle('active',s.id===id));
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('active',b.dataset.s===id));
