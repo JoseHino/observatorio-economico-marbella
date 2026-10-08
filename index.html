@@ -161,6 +161,9 @@ nav button[data-s="asistente"].active{background:linear-gradient(135deg,#5a3ee0,
 .tag.live{background:rgba(48,181,106,.13);color:var(--good)}
 .tag.stat{background:rgba(240,160,32,.15);color:#96620a}
 .tag.geo{background:rgba(0,113,227,.10);color:#0058b0}
+.ramas-glos{margin-top:12px;padding:14px 16px;border:1px solid var(--line,rgba(127,127,127,.25));border-radius:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px 18px;font-size:12.5px;line-height:1.45;color:var(--mut)}
+.ramas-glos .rg-t{grid-column:1/-1;font-weight:600;color:inherit;font-size:13px}
+.ramas-glos b{color:var(--ink,inherit)}.ramas-glos .rg-l{font-size:11px;color:var(--faint)}
 .nota{display:block;margin-top:7px;color:var(--faint);font-size:12px;line-height:1.45}
 .cult{display:inline-block;margin-top:8px;font-size:11.5px;font-weight:550;padding:3px 10px;border-radius:980px;
   background:rgba(0,0,0,.045);color:var(--ink2)}
@@ -677,6 +680,19 @@ function buildTurismo(){
 }
 
 /* ================= EMPRESAS ================= */
+/* grandes ramas del DIRCE (tabla 4721): nombre corto para el eje + explicación */
+const RAMAS=[
+  {k:'industria',corto:'Industria',letras:'B–E',detalle:'Industrias extractivas, manufactureras, suministro de energía, agua y gestión de residuos.'},
+  {k:'construcci',corto:'Construcción',letras:'F',detalle:'Edificación, obra civil y oficios de la construcción (electricistas, fontaneros, reformas…).'},
+  {k:'comercio',corto:'Comercio, transporte y hostelería',letras:'G–I',detalle:'Comercio mayorista y minorista, talleres de vehículos, transporte y almacenamiento, hoteles y restauración.'},
+  {k:'informaci',corto:'Información y comunicaciones',letras:'J',detalle:'Edición, audiovisual, telecomunicaciones, programación e informática.'},
+  {k:'financieras',corto:'Finanzas y seguros',letras:'K',detalle:'Banca, seguros, fondos y actividades auxiliares (corredurías, agencias de seguros…).'},
+  {k:'inmobiliarias',corto:'Inmobiliarias',letras:'L',detalle:'Compraventa, alquiler y gestión de inmuebles (agencias y administradores de fincas).'},
+  {k:'profesionales',corto:'Servicios profesionales y a empresas',letras:'M–N',detalle:'Abogados, asesores, arquitectos, consultoría, publicidad (M) y alquiler de vehículos, agencias de viaje, limpieza, seguridad, jardinería y otros servicios auxiliares (N).'},
+  {k:'p y q',corto:'Educación, sanidad y servicios sociales',letras:'P y Q',detalle:'Sección P: academias, autoescuelas y centros educativos privados. Sección Q: clínicas, consultas médicas y dentales, residencias y servicios sociales.'},
+  {k:'r y s',corto:'Ocio, cultura y otros servicios',letras:'R y S',detalle:'Sección R: actividades artísticas, deportivas, recreativas y de entretenimiento (gimnasios, clubes, espectáculos). Sección S: otros servicios personales como peluquerías, estética, lavanderías, reparaciones del hogar y asociaciones.'}
+];
+function ramaInfo(nom){const l=(nom||'').toLowerCase();if(l.includes('resto de servicios'))return null;return RAMAS.find(r=>l.includes(r.k))||{corto:nom.replace(/^marbella\.\s*(total\.\s*)*/i,''),letras:'—',detalle:''};}
 function buildEmpresas(){
   const el=document.getElementById('empresas');
   const anios=((DATA.empresas||{}).anios||[]);
@@ -689,6 +705,9 @@ function buildEmpresas(){
      '<select id="emp-year" class="btn">'+anios.slice().reverse().map(y=>'<option value="'+y+'">'+y+'</option>').join('')+'</select></div>'+
    '<div class="grid">'+
     card('c_emp_sec','Composición por rama de actividad',geoTag('Marbella')+'<span id="emp-sec-year"></span> Distribución de las empresas por gran rama CNAE'+nota('Anual (DIRCE). Usa el selector para cambiar de año.'),'stat',ineTbl(4721,'DIRCE (tabla 4721)'),true)+
+   '</div>'+
+   '<div class="ramas-glos"><div class="rg-t">¿Qué incluye cada rama?</div>'+
+     RAMAS.map(r=>'<div class="rg-i"><b>'+r.corto+'</b> <span class="rg-l">CNAE '+r.letras+'</span><br>'+r.detalle+'</div>').join('')+
    '</div>'+
    '<div class="h2" style="margin-top:24px">Dinamismo empresarial · Sociedades mercantiles</div>'+
    '<div class="pdesc">Creación y disolución de sociedades mercantiles. La estadística del INE llega a nivel <b>provincial (Málaga)</b>; no se publica por municipio.</div>'+
@@ -703,10 +722,12 @@ function buildEmpresas(){
   function drawSec(year){
     if(charts.empsec){try{charts.empsec.destroy()}catch(e){}}
     const lbl=document.getElementById('emp-sec-year');if(lbl)lbl.textContent='('+year+')';
-    const sec=((DATA.empresas||{}).sectores||[]).map(s=>{const p=s.serie.find(x=>x.y==year);return p?{rama:s.rama,v:p.v}:null;}).filter(Boolean).sort((a,b)=>b.v-a.v).slice(0,9);
+    /* "Resto de servicios" es un subtotal (J a S) que duplicaría ramas ya mostradas: se descarta */
+    const sec=((DATA.empresas||{}).sectores||[]).map(s=>{const r=ramaInfo(s.rama),p=s.serie.find(x=>x.y==year);return r&&p?{r,v:p.v}:null;}).filter(Boolean).sort((a,b)=>b.v-a.v);
     if(!sec.length)return;
-    charts.empsec=new Chart(c('c_emp_sec'),{type:'bar',data:{labels:sec.map(x=>x.rama.length>40?x.rama.slice(0,38)+'…':x.rama),datasets:[{data:sec.map(x=>x.v),backgroundColor:sec.map((x,i)=>pal[i%pal.length])}]},
-      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>sec[i[0].dataIndex].rama,label:x=>fmt(x.parsed.x)+' empresas'}}},scales:{x:axY(),y:{grid:{display:false},ticks:{font:{size:10.5}}}}}});
+    const tot=sec.reduce((a,x)=>a+x.v,0);
+    charts.empsec=new Chart(c('c_emp_sec'),{type:'bar',data:{labels:sec.map(x=>x.r.corto),datasets:[{data:sec.map(x=>x.v),backgroundColor:sec.map((x,i)=>pal[i%pal.length])}]},
+      options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>sec[i[0].dataIndex].r.corto+' (CNAE '+sec[i[0].dataIndex].r.letras+')',label:x=>fmt(x.parsed.x)+' empresas · '+(100*x.parsed.x/tot).toFixed(1).replace('.',',')+' %',afterLabel:x=>sec[x.dataIndex].r.detalle}}},scales:{x:axY(),y:{grid:{display:false},ticks:{font:{size:11.5}}}}}});
   }
   const sel=document.getElementById('emp-year');
   if(sel){sel.addEventListener('change',()=>drawSec(+sel.value));if(anios.length)drawSec(anios[anios.length-1]);}

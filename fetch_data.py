@@ -370,7 +370,8 @@ def empresas():
     for s in j:
         nom = s["Nombre"]
         low = nom.lower()
-        if "total cnae" in low:
+        # "Resto de servicios" es el subtotal de las secciones J a S: duplicaría ramas
+        if "total cnae" in low or "resto de servicios" in low:
             continue
         pts = [{"y": int(p["Anyo"]), "v": round(p["Valor"])}
                for p in s["Data"] if p.get("Valor") is not None]
@@ -383,6 +384,8 @@ def empresas():
         if "total de empresas." in low:
             rama = nom.split("Total de empresas.", 1)[1]
         rama = rama.replace("Empresas.", "").strip(" .")
+        # el INE antepone "Marbella. Total. Total." al nombre de la rama
+        rama = re.sub(r"^marbella\.\s*(total\.\s*)*", "", rama, flags=re.I).strip(" .")
         if rama:
             sectores.append({"rama": rama, "serie": pts})
     write("empresas.json", {"total": total, "sectores": sectores, "anios": sorted(anios)})
