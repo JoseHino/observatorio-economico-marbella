@@ -191,6 +191,47 @@ select.btn{appearance:auto;border-radius:10px}
 .tbl tr:hover td{background:var(--tint)}
 .barra{display:inline-block;height:6px;border-radius:3px;background:var(--teal);vertical-align:middle;margin-right:6px;opacity:.75}
 
+/* ---- renta: comparador ---- */
+.rc-bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:var(--surface);border:1px solid var(--hair);
+  border-radius:18px;padding:14px 16px;box-shadow:var(--shadow);margin-bottom:18px}
+.rc-bar label{font-size:12px;color:var(--mut);font-weight:550;display:flex;align-items:center;gap:6px}
+.rc-bar select,.rc-bar input{font:inherit;font-size:13.5px;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:var(--surface);color:var(--ink);max-width:100%}
+.rc-bar input{width:230px}
+.rc-chips{display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%}
+.rc-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:980px;padding:4px 6px 4px 10px;font-size:12.5px;font-weight:550;background:var(--surface);color:var(--ink)}
+.rc-chip i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.rc-chip button{border:0;background:rgba(0,0,0,.06);border-radius:50%;width:18px;height:18px;line-height:18px;padding:0;cursor:pointer;font-size:12px;color:var(--mut)}
+.rc-chip button:hover{background:rgba(0,0,0,.12);color:var(--ink)}
+.rc-chip.ref{border-style:dashed;color:var(--mut);cursor:pointer;padding-right:10px}
+.rc-chip.ref.off{opacity:.45;text-decoration:line-through}
+.rc-pre{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12px;color:var(--mut)}
+.rc-pre button{font:inherit;font-size:12px;border:1px dashed var(--line);background:none;border-radius:980px;padding:3px 10px;cursor:pointer;color:var(--ink2)}
+.rc-pre button:hover{border-color:var(--blue);color:var(--blue)}
+.seg{display:inline-flex;background:rgba(0,0,0,.05);border-radius:980px;padding:2px;margin-bottom:10px}
+.seg button{border:0;background:none;font:inherit;font-size:12.5px;font-weight:550;color:var(--mut);padding:4px 12px;border-radius:980px;cursor:pointer}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.rk-scroll{max-height:620px;overflow-y:auto;position:relative}
+.lid td:first-child{min-width:240px}
+.lid td:nth-child(4),.lid th:nth-child(4),.lid td:nth-child(2),.lid th:nth-child(2){text-align:left;color:var(--ink)}
+#rc-kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+#rc-kpis .v{font-size:28px}
+.lid .me{font-weight:650}
+.tbl.sort th{cursor:pointer;user-select:none} .tbl.sort th:hover{color:var(--ink)}
+.tbl.sort th.act{color:var(--ink)}
+.tbl tr.mb td{background:rgba(0,113,227,.07);font-weight:600}
+.tbl tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--c,#999)}
+.tbl td.cl{cursor:pointer}
+.rc-exp{background:var(--surface);border:1px solid var(--hair);border-radius:18px;padding:4px 20px;box-shadow:var(--shadow);margin:0 0 18px}
+.rc-exp summary{cursor:pointer;font-weight:600;padding:12px 0;font-size:15px}
+.rc-exp .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:4px 26px;padding-bottom:14px;font-size:13.5px;color:var(--ink2);line-height:1.5}
+.rc-exp dt{font-weight:600;color:var(--ink);margin-top:10px} .rc-exp dd{margin:2px 0 0}
+.rc-aviso{font-size:13px;color:var(--ink2);background:rgba(240,160,32,.10);border-radius:12px;padding:10px 14px;margin:10px 0 14px}
+#rc-tb td:nth-child(2),#rc-tb th:nth-child(2){text-align:right;color:inherit}
+#rc-tb th:nth-child(3),.lid th:nth-child(3){text-align:right}
+#rc-tb thead th{position:sticky;top:0;background:var(--surface);z-index:1}
+#rc-tb td:first-child{min-width:190px}
+@media(max-width:820px){.rc-bar{position:static}.rc-bar input{width:100%}}
+
 footer{border-top:1px solid var(--hair);background:var(--tint);color:var(--faint);font-size:13px;line-height:1.65}
 footer .wrap{padding-top:26px;padding-bottom:44px}
 footer code{background:rgba(0,0,0,.05);padding:1px 5px;border-radius:5px;font-size:12px}
@@ -328,7 +369,7 @@ const SEC_DESC={
   turismo:'Viajeros, ocupación y rentabilidad hotelera.',
   empresas:'Empresas activas por rama y sociedades creadas.',
   coyuntura:'Inflación y pulso del consumo minorista.',
-  renta:'Renta de los hogares y riesgo de pobreza.',
+  renta:'Renta, desigualdad y pobreza: Marbella frente a cualquier municipio de Málaga y las capitales.',
   demografia:'Población del Padrón, edad y nacionalidad.',
   vivienda:'Compraventa, hipotecas y precio de la vivienda.'};
 const geoTag=t=>'<span class="tag geo">'+t+'</span>';
@@ -410,7 +451,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis','renta_comparador'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -793,28 +834,277 @@ function buildCoyuntura(){
       options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});}
 }
 
-/* ================= RENTA ================= */
+/* ================= RENTA =================
+   Comparador sobre data/renta_comparador.json (fetch_data.py · renta_comparador):
+   todos los municipios de Málaga y las 52 capitales, con el Atlas de renta del INE
+   (por persona, hogar y unidad de consumo, desigualdad, pobreza, fuentes de ingreso)
+   y la estadística del IRPF de la AEAT (por declaración, media y mediana).
+   Las series vienen alineadas con years_ine / years_aeat (null = sin dato). */
+const RC_MB='29069';
+/* colores validados para daltonismo (dataviz · validate_palette): Marbella siempre azul */
+const RC_PAL=['#0071e3','#ff5a5f','#00a8a3','#f0a020','#9a5cd0','#a0522d'];
+const RC_MAX=6;
+const RC_REF={ES:['España','#6e6e73',[6,4]],AN:['Andalucía','#8e8e93',[2,3]],PM:['Provincia de Málaga','#aeaeb2',[10,3,2,3]]};
+/* g: grupo del selector · s: i = INE, a = AEAT · d: decimales · inv: más es peor */
+const RC_IND={
+  np:{l:'Renta neta media por persona',u:'€',s:'i',g:'Nivel de renta (INE)'},
+  nh:{l:'Renta neta media por hogar',u:'€',s:'i',g:'Nivel de renta (INE)'},
+  bp:{l:'Renta bruta media por persona',u:'€',s:'i',g:'Nivel de renta (INE)'},
+  bh:{l:'Renta bruta media por hogar',u:'€',s:'i',g:'Nivel de renta (INE)'},
+  me:{l:'Renta mediana por unidad de consumo',u:'€',s:'i',g:'Nivel de renta (INE)'},
+  mu:{l:'Renta media por unidad de consumo',u:'€',s:'i',g:'Nivel de renta (INE)'},
+  gini:{l:'Índice de Gini',u:'',d:1,s:'i',inv:true,g:'Desigualdad y pobreza (INE)'},
+  p8020:{l:'Ratio P80/P20',u:'veces',d:1,s:'i',inv:true,g:'Desigualdad y pobreza (INE)'},
+  b60:{l:'Riesgo de pobreza (% bajo el 60 % de la mediana nacional)',u:'%',d:1,s:'i',inv:true,g:'Desigualdad y pobreza (INE)'},
+  b40:{l:'Pobreza severa (% bajo el 40 % de la mediana nacional)',u:'%',d:1,s:'i',inv:true,g:'Desigualdad y pobreza (INE)'},
+  e200:{l:'Rentas altas (% por encima del 200 % de la mediana nacional)',u:'%',d:1,s:'i',g:'Desigualdad y pobreza (INE)'},
+  f_sal:{l:'Peso de los salarios en la renta bruta',u:'%',d:1,s:'i',g:'Fuentes de ingreso (INE)'},
+  f_pen:{l:'Peso de las pensiones en la renta bruta',u:'%',d:1,s:'i',g:'Fuentes de ingreso (INE)'},
+  f_des:{l:'Peso de las prestaciones por desempleo',u:'%',d:1,s:'i',g:'Fuentes de ingreso (INE)'},
+  f_otp:{l:'Peso de otras prestaciones',u:'%',d:1,s:'i',g:'Fuentes de ingreso (INE)'},
+  f_otr:{l:'Peso de otros ingresos (capital, rentas, actividades…)',u:'%',d:1,s:'i',g:'Fuentes de ingreso (INE)'},
+  ab:{l:'Renta bruta media por declaración',u:'€',s:'a',g:'Agencia Tributaria (IRPF)'},
+  abm:{l:'Renta bruta mediana por declaración',u:'€',s:'a',g:'Agencia Tributaria (IRPF)'},
+  ad:{l:'Renta disponible media por declaración',u:'€',s:'a',g:'Agencia Tributaria (IRPF)'},
+  adm:{l:'Renta disponible mediana por declaración',u:'€',s:'a',g:'Agencia Tributaria (IRPF)'},
+  hog:{l:'Tamaño medio del hogar',u:'personas',d:1,s:'i',g:'Contexto demográfico (INE)'},
+  e65:{l:'% de población de 65 y más años',u:'%',d:1,s:'i',g:'Contexto demográfico (INE)'},
+  esp:{l:'% de población de nacionalidad española',u:'%',d:1,s:'i',g:'Contexto demográfico (INE)'},
+  pob:{l:'Población (hogares del Atlas)',u:'hab.',s:'i',g:'Contexto demográfico (INE)'},
+};
+const RC_FUENTES=[['f_sal','Salarios','#0071e3'],['f_pen','Pensiones','#00a8a3'],['f_des','Desempleo','#ff5a5f'],['f_otp','Otras prestaciones','#f0a020'],['f_otr','Otros ingresos','#9a5cd0']];
+const RC_PRESETS=[
+  ['Costa del Sol occidental',['29051','29023','29070','29054','29025']],
+  ['Área de Málaga',['29067','29007','29082','29901','29038']],
+  ['Capitales andaluzas',['29067','41091','18087','14021','11012']],
+  ['Grandes capitales',['28079','08019','46250','41091','07040']],
+];
+const RC={sel:[RC_MB,'29067','29051','29023','29007'],col:{},refs:{ES:true,AN:true,PM:true},ind:'np',year:null,grp:'m',tsort:'np',tdir:-1,tgrp:'m'};
+try{const g=JSON.parse(localStorage.getItem('rc_sel')||'null');if(Array.isArray(g)&&g.length)RC.sel=[RC_MB,...g.filter(c=>c!==RC_MB)].slice(0,RC_MAX);}catch(e){}
+
+const rcD=()=>DATA.renta_comparador||{};
+const rcEnt=c=>RC_REF[c]?(rcD().ref||{})[c]:(rcD().m||{})[c];
+/* "Málaga (ciudad)" para no confundirla con la provincia, que va como referencia */
+const rcName=c=>RC_REF[c]?RC_REF[c][0]:c==='29067'?'Málaga (ciudad)':((rcEnt(c)||{}).n||c);
+const rcYears=k=>(RC_IND[k].s==='a'?rcD().years_aeat:rcD().years_ine)||[];
+function rcVal(c,k,y){const e=rcEnt(c);if(!e)return null;const s=(RC_IND[k].s==='a'?e.a:e.i)||{};
+  const ys=rcYears(k);const i=ys.indexOf(y);return i<0||!s[k]?null:s[k][i];}
+const rcLastY=k=>{const ys=rcYears(k);return ys.length?ys[ys.length-1]:null;};
+const rcFmt=(v,k)=>{if(v==null)return '—';const I=RC_IND[k];const t=fmt(v,I.d||0);
+  return I.u==='€'?t+' €':I.u==='%'?t+' %':t;};
+function rcColor(c){if(c===RC_MB)return RC_PAL[0];
+  if(!RC.col[c]){const used=new Set(RC.sel.map(x=>RC.col[x]).filter(Boolean));used.add(RC_PAL[0]);
+    RC.col[c]=RC_PAL.find(p=>!used.has(p))||'#888';}
+  return RC.col[c];}
+function rcSave(){try{localStorage.setItem('rc_sel',JSON.stringify(RC.sel));}catch(e){}}
+/* puesto de un municipio en su grupo para un indicador y año (1 = más alto) */
+function rcRank(c,k,y,grp){const m=rcD().m||{};
+  const xs=Object.keys(m).filter(x=>m[x].g.includes(grp)).map(x=>[x,rcVal(x,k,y)]).filter(x=>x[1]!=null).sort((a,b)=>b[1]-a[1]);
+  const i=xs.findIndex(x=>x[0]===c);return i<0?null:[i+1,xs.length];}
+
 function buildRenta(){
-  const el=document.getElementById('renta');
+  const el=document.getElementById('renta');const D=rcD();
+  if(!D.m){el.innerHTML='<div class="h2">Renta y bienestar</div><div class="note">Los datos del comparador de renta aún no están disponibles.</div>';return;}
+  const yI=rcLastY('np'),yA=rcLastY('ab');
   el.innerHTML='<div class="h2">Renta y bienestar</div>'+
-   '<div class="pdesc">Renta de los hogares y riesgo de pobreza en Marbella, desde el Atlas de distribución de renta del INE.</div>'+
+   '<div class="pdesc">Cuánto ingresan los hogares de Marbella y cómo se reparte, comparado con cualquier municipio de la provincia de Málaga y con todas las capitales de provincia. Dos fuentes oficiales: el Atlas de renta del INE ('+yI+') y la estadística del IRPF de la Agencia Tributaria ('+yA+').</div>'+
+   '<div class="kpis" id="rc-kpis"></div>'+
+   rcExplica()+
+   '<div class="card full" style="margin-bottom:18px"><h3>¿Quién es el más rico de la provincia? Depende de cómo se mida</h3>'+
+     '<div class="cs"><span class="tag stat">ANUAL</span>'+geoTag('Provincia de Málaga')+'Municipio que encabeza la provincia en cada indicador, y puesto de Marbella. Pulsa un indicador para verlo en el comparador.</div>'+
+     '<div class="tscroll"><table class="tbl lid" id="rc-lid"></table></div>'+
+     '<div class="src">Fuente: <a href="https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736177088&menu=ultiDatos&idp=1254735976608" target="_blank" rel="noopener">INE · Atlas de distribución de renta de los hogares</a> · <a href="https://sede.agenciatributaria.gob.es/Sede/estadisticas/estadisticas-impuesto/estadistica-declarantes-irpf-municipios.html" target="_blank" rel="noopener">AEAT · Estadística de los declarantes del IRPF por municipios</a></div></div>'+
+   '<div class="h2" style="font-size:24px;margin-top:26px">Comparador</div>'+
+   '<div class="rc-bar" id="rc-bar"></div>'+
    '<div class="grid">'+
-    card('c_renta','Renta media anual',geoTag('Marbella')+'Renta neta y bruta por persona y por hogar (€)'+nota('Anual. Atlas de renta del INE, con ~2 años de desfase (datos fiscales definitivos).'),'stat',ineTbl(30824,'Atlas de renta (tabla 30824)'),true)+
-    card('c_renta_uc','Media vs. mediana por unidad de consumo',geoTag('Marbella')+'Su diferencia indica concentración de renta (desigualdad)'+nota('Anual. Atlas de renta del INE (~2 años de desfase).'),'stat',ineTbl(30824,'Atlas de renta (tabla 30824)'))+
-    card('c_pobreza','Riesgo de pobreza relativa',geoTag('Marbella')+'% de población bajo el 60% de la mediana nacional'+nota('Anual. Atlas de distribución de renta del INE (~2 años de desfase).'),'stat',ineTbl(30831,'Atlas distribución (tabla 30831)'))+
-   '</div>';
-  const r=DATA.renta||{};const np=r.neta_persona||[],nh=r.neta_hogar||[],bp=r.bruta_persona||[];
-  if(np.length){charts.renta=new Chart(c('c_renta'),{type:'line',data:{labels:np.map(x=>x.y),datasets:[
-    Object.assign(ds('Neta media/persona',np.map(x=>x.v),COL.c1,true),{yAxisID:'y'}),
-    Object.assign(ds('Bruta media/persona',bp.map(x=>x.v),COL.c3),{yAxisID:'y'}),
-    Object.assign(ds('Neta media/hogar',nh.map(x=>x.v),COL.c4),{yAxisID:'y1'})]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY(v=>abbr(v)+' €'),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>abbr(v)+' €'}}}})});}
-  const mu=r.media_uc||[],me=r.mediana_uc||[];
-  if(mu.length){charts.ruc=new Chart(c('c_renta_uc'),{type:'line',data:{labels:mu.map(x=>x.y),datasets:[ds('Media',mu.map(x=>x.v),COL.c1,true),ds('Mediana',me.map(x=>x.v),COL.c4)]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:axY(v=>abbr(v)+' €')}})});}
-  const rp=r.riesgo_pobreza||[];
-  if(rp.length){charts.pob=new Chart(c('c_pobreza'),{type:'bar',data:{labels:rp.map(x=>x.y),datasets:[{label:'% riesgo',data:rp.map(x=>x.v),backgroundColor:hexA(COL.c2,.8)}]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:axY(v=>v+'%')}})});}
+     rcCard('rc_evo','Evolución','Cada municipio en su color; en gris discontinuo, las referencias.','rc-evo-w',true)+
+     '<div class="card full"><h3 id="rc-rk-t">Ranking</h3><div class="cs" id="rc-rk-s"></div>'+
+       '<div class="seg" id="rc-rk-g"><button data-g="m">Municipios de Málaga</button><button data-g="c">Capitales de provincia</button></div>'+
+       '<div class="rk-scroll"><div class="cwrap" id="rc-rk-w"><canvas id="rc_rk"></canvas></div></div>'+
+       '<div class="src" id="rc-rk-src"></div></div>'+
+     rcCard('rc_fue','¿De dónde sale la renta?','Peso de cada fuente en la renta bruta de los hogares (%), último año.','rc-fue-w')+
+     rcCard('rc_dis','Renta y desigualdad','Renta neta por persona frente al índice de Gini (0 = todos ingresan lo mismo). Cada punto es un municipio del grupo elegido en el ranking.','rc-dis-w')+
+     rcCard('rc_fis','INE frente a Agencia Tributaria','Misma renta bruta, distinto denominador: por persona (INE) y por declaración, media y mediana (AEAT).','rc-fis-w',true)+
+   '</div>'+
+   '<div class="card full" style="margin-top:18px"><h3>Tabla completa</h3>'+
+     '<div class="cs">Pulsa una cabecera para ordenar y un municipio para añadirlo (o quitarlo) del comparador. Año: INE '+yI+' · AEAT '+yA+'.</div>'+
+     '<div class="seg" id="rc-tb-g"><button data-g="m">Municipios de Málaga</button><button data-g="c">Capitales de provincia</button></div>'+
+     '<div class="tscroll" style="max-height:560px;overflow:auto"><table class="tbl sort" id="rc-tb"></table></div>'+
+     '<div class="src">Fuente: INE · Atlas de distribución de renta de los hogares (tablas <a href="https://www.ine.es/jaxiT3/Tabla.htm?t=30824" target="_blank" rel="noopener">30824</a>, <a href="https://www.ine.es/jaxiT3/Tabla.htm?t=37677" target="_blank" rel="noopener">37677</a>, <a href="https://www.ine.es/jaxiT3/Tabla.htm?t=30829" target="_blank" rel="noopener">30829</a>, <a href="https://www.ine.es/jaxiT3/Tabla.htm?t=30832" target="_blank" rel="noopener">30832</a>) · AEAT · IRPF por municipios. Los municipios de menos de 1.000 habitantes y los de País Vasco y Navarra no tienen dato de la AEAT.</div></div>';
+  rcKpis();rcLideres();rcBar();rcDraw();rcTabla();
+  el.querySelectorAll('#rc-rk-g button').forEach(b=>b.addEventListener('click',()=>{RC.grp=b.dataset.g;rcDraw();}));
+  el.querySelectorAll('#rc-tb-g button').forEach(b=>b.addEventListener('click',()=>{RC.tgrp=b.dataset.g;rcTabla();}));
+}
+function rcCard(id,t,sub,wid,full){
+  return '<div class="card'+(full?' full':'')+'"><h3 id="'+id+'_t">'+t+'</h3><div class="cs"><span class="tag stat">ANUAL</span><span id="'+id+'_s">'+sub+'</span></div>'+
+    '<div class="cwrap" id="'+wid+'"><canvas id="'+id+'"></canvas></div><div class="src" id="'+id+'_src"></div></div>';
+}
+const RC_SRC_I='<a href="https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736177088&menu=ultiDatos&idp=1254735976608" target="_blank" rel="noopener">INE · Atlas de distribución de renta de los hogares</a>';
+const RC_SRC_A='<a href="https://sede.agenciatributaria.gob.es/Sede/estadisticas/estadisticas-impuesto/estadistica-declarantes-irpf-municipios.html" target="_blank" rel="noopener">AEAT · Estadística de los declarantes del IRPF por municipios</a>';
+
+function rcKpis(){
+  const K=[['np','Renta neta por persona'],['nh','Renta neta por hogar'],['me','Renta mediana por unidad de consumo'],['gini','Índice de Gini (desigualdad)'],['b60','Riesgo de pobreza'],['abm','Renta bruta mediana por declaración (AEAT)']];
+  document.getElementById('rc-kpis').innerHTML=K.filter(([k])=>rcVal(RC_MB,k,rcLastY(k))!=null).map(([k,l])=>{
+    const y=rcLastY(k),v=rcVal(RC_MB,k,y),p=rcVal(RC_MB,k,y-1);
+    const d=p!=null&&v!=null?(RC_IND[k].u==='%'||k==='gini'?v-p:pct(v,p)):null;
+    let dt='',dc='';
+    if(d!=null){const good=(d>0)!==!!RC_IND[k].inv;const ar=d>0?'▲':(d<0?'▼':'■');
+      dt=ar+' '+fmt(Math.abs(d),1)+(RC_IND[k].u==='%'||k==='gini'?' puntos':' %')+' vs. '+(y-1);dc=Math.abs(d)<0.05?'':(good?'good':'bad');}
+    const r=rcRank(RC_MB,k,y,'m');
+    return '<div class="kpi"><div class="l">'+l+' · '+y+'</div><div class="v">'+rcFmt(v,k)+'</div>'+
+      (dt?'<div class="d '+dc+'">'+dt+'</div>':'')+
+      (r?'<div class="nota">'+r[0]+'.º de '+r[1]+' en la provincia'+(RC_IND[k].inv?' (1.º = el valor más alto)':'')+'</div>':'')+'</div>';
+  }).join('');
+}
+function rcExplica(){
+  return '<details class="rc-exp"><summary>Qué mide cada indicador y por qué las fuentes no coinciden</summary><div class="cols"><dl>'+
+   '<dt>Renta bruta y renta neta</dt><dd>La bruta es todo lo ingresado antes de IRPF y cotizaciones (salarios, pensiones, prestaciones, rentas del capital…). La neta es lo que queda después: lo que el hogar puede gastar o ahorrar.</dd>'+
+   '<dt>Por persona y por hogar</dt><dd>La misma renta dividida entre residentes o entre hogares. «Por hogar» favorece a los municipios de familias grandes, con varios sueldos por casa: por eso Alhaurín de la Torre lidera la provincia por hogar y no por persona.</dd>'+
+   '<dt>Por unidad de consumo · media y mediana</dt><dd>Divide la renta del hogar entre su tamaño «equivalente» (1 el primer adulto, 0,5 los demás adultos, 0,3 los menores). La <b>mediana</b> es la renta del residente que queda justo en medio: los ricos extremos no la mueven, por eso es la mejor medida del nivel de vida típico.</dd></dl><dl>'+
+   '<dt>Desigualdad: Gini y P80/P20</dt><dd>El Gini va de 0 (todos ingresan lo mismo) a 100 (uno se lo lleva todo). El P80/P20 dice cuántas veces más ingresa el 20 % más rico que el 20 % más pobre.</dd>'+
+   '<dt>Riesgo de pobreza</dt><dd>Porcentaje de población con ingresos por unidad de consumo por debajo del 60 % de la mediana de toda España (40 % para la pobreza severa). Al ser un umbral nacional, sirve para comparar municipios entre sí.</dd>'+
+   '<dt>Fuentes de ingreso</dt><dd>Qué parte de la renta bruta viene de salarios, pensiones, desempleo, otras prestaciones u otros ingresos (capital, alquileres, actividades económicas).</dd></dl><dl>'+
+   '<dt>INE frente a Agencia Tributaria</dt><dd>Las dos parten del IRPF, pero el INE divide entre la población residente y recorta a cada contribuyente en ±3 millones de euros, y la AEAT divide entre declaraciones y no recorta. Unas pocas rentas enormes disparan la media de la AEAT en un municipio pequeño: en 2024 Benahavís fue 2.º de España por declaración y, con el INE, cae al puesto 26 de la provincia en renta neta por hogar. Por eso conviene mirar también la <b>mediana</b>.</dd>'+
+   '<dt>Población sin datos fiscales</dt><dd>Los residentes extranjeros que no tributan en España no aparecen en el IRPF. En municipios con mucha población comunitaria la renta por habitante puede salir más baja de lo real.</dd>'+
+   '<dt>Calendario</dt><dd>Ambas son anuales y llegan con casi dos años de retraso: el INE publica en octubre y la AEAT a finales de septiembre. La AEAT no cubre municipios de menos de 1.000 habitantes ni País Vasco y Navarra.</dd></dl></div></details>';
+}
+function rcLideres(){
+  const keys=['nh','bh','np','bp','me','abm','ab'];
+  const m=rcD().m||{};
+  const rows=keys.map(k=>{const y=rcLastY(k);
+    const xs=Object.keys(m).filter(c=>m[c].g.includes('m')).map(c=>[c,rcVal(c,k,y)]).filter(x=>x[1]!=null).sort((a,b)=>b[1]-a[1]);
+    if(!xs.length)return '';
+    const r=rcRank(RC_MB,k,y,'m');
+    return '<tr><td class="cl" data-k="'+k+'">'+RC_IND[k].l+' <span class="nota" style="display:inline">· '+y+'</span></td>'+
+      '<td>'+escR(m[xs[0][0]].n)+'</td><td>'+rcFmt(xs[0][1],k)+'</td>'+
+      '<td>'+escR(m[xs[1]?xs[1][0]:xs[0][0]].n)+'</td>'+
+      '<td class="me">'+(r?r[0]+'.º de '+r[1]:'—')+'</td><td class="me">'+rcFmt(rcVal(RC_MB,k,y),k)+'</td></tr>';}).join('');
+  const t=document.getElementById('rc-lid');
+  t.innerHTML='<thead><tr><th>Indicador</th><th>1.º de la provincia</th><th>Valor</th><th>2.º</th><th>Marbella</th><th>Valor de Marbella</th></tr></thead><tbody>'+rows+'</tbody>';
+  t.querySelectorAll('td.cl').forEach(td=>td.addEventListener('click',()=>{RC.ind=td.dataset.k;RC.year=null;rcBar();rcDraw();
+    document.getElementById('rc-bar').scrollIntoView({behavior:'smooth',block:'start'});}));
+}
+const escR=s=>String(s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+
+function rcBar(){
+  const m=rcD().m||{};
+  const gs={};Object.keys(RC_IND).forEach(k=>{(gs[RC_IND[k].g]=gs[RC_IND[k].g]||[]).push(k);});
+  const opts=Object.entries(gs).map(([g,ks])=>'<optgroup label="'+g+'">'+ks.map(k=>'<option value="'+k+'"'+(k===RC.ind?' selected':'')+'>'+RC_IND[k].l+'</option>').join('')+'</optgroup>').join('');
+  const ys=rcYears(RC.ind);if(!RC.year||!ys.includes(RC.year))RC.year=ys[ys.length-1];
+  const yopts=ys.slice().reverse().map(y=>'<option'+(y===RC.year?' selected':'')+'>'+y+'</option>').join('');
+  const lista=Object.keys(m).sort((a,b)=>m[a].n.localeCompare(m[b].n,'es')).map(c=>'<option value="'+escR(rcName(c))+(m[c].p&&m[c].n!==m[c].p?' ('+escR(m[c].p)+')':'')+'"></option>').join('');
+  const chips=RC.sel.map(c=>'<span class="rc-chip"><i style="background:'+rcColor(c)+'"></i>'+escR(rcName(c))+(c===RC_MB?'':'<button data-q="'+c+'" aria-label="Quitar '+escR(rcName(c))+'">×</button>')+'</span>').join('')+
+    Object.keys(RC_REF).map(r=>'<span class="rc-chip ref'+(RC.refs[r]?'':' off')+'" data-r="'+r+'" title="Mostrar u ocultar">'+RC_REF[r][0]+'</span>').join('');
+  document.getElementById('rc-bar').innerHTML=
+    '<label>Indicador <select id="rc-ind">'+opts+'</select></label>'+
+    '<label>Año <select id="rc-y">'+yopts+'</select></label>'+
+    '<label>Añadir municipio <input id="rc-add" list="rc-list" placeholder="Escribe: Estepona, Sevilla…"'+(RC.sel.length>=RC_MAX?' disabled title="Máximo '+RC_MAX+' a la vez"':'')+'><datalist id="rc-list">'+lista+'</datalist></label>'+
+    '<div class="rc-pre">Grupos: '+RC_PRESETS.map((p,i)=>'<button data-p="'+i+'">'+p[0]+'</button>').join('')+'</div>'+
+    '<div class="rc-chips">'+chips+'</div>';
+  const b=document.getElementById('rc-bar');
+  b.querySelector('#rc-ind').addEventListener('change',e=>{RC.ind=e.target.value;RC.year=null;rcBar();rcDraw();});
+  b.querySelector('#rc-y').addEventListener('change',e=>{RC.year=+e.target.value;rcDraw();});
+  const inp=b.querySelector('#rc-add');
+  inp.addEventListener('change',()=>{const v=inp.value.trim().toLowerCase();
+    const c=Object.keys(m).find(c=>{const n=rcName(c).toLowerCase();return v===n||v.startsWith(n+' (');})||
+            Object.keys(m).find(c=>m[c].n.toLowerCase()===v);
+    if(c)rcToggle(c,true);});
+  b.querySelectorAll('[data-q]').forEach(x=>x.addEventListener('click',()=>rcToggle(x.dataset.q,false)));
+  b.querySelectorAll('[data-r]').forEach(x=>x.addEventListener('click',()=>{RC.refs[x.dataset.r]=!RC.refs[x.dataset.r];rcBar();rcDraw();}));
+  b.querySelectorAll('[data-p]').forEach(x=>x.addEventListener('click',()=>{RC.col={};RC.sel=[RC_MB,...RC_PRESETS[+x.dataset.p][1].filter(c=>m[c])].slice(0,RC_MAX);rcSave();rcBar();rcDraw();rcTabla();}));
+}
+function rcToggle(c,on){
+  if(c===RC_MB)return;
+  const i=RC.sel.indexOf(c);
+  if(on&&i<0){if(RC.sel.length>=RC_MAX)return;RC.sel.push(c);}
+  else if(!on&&i>=0){RC.sel.splice(i,1);delete RC.col[c];}
+  else if(on===undefined){return rcToggle(c,i<0);}
+  rcSave();rcBar();rcDraw();rcTabla();
+}
+function rcKill(k){if(charts[k]){try{charts[k].destroy();}catch(e){}delete charts[k];}}
+
+function rcDraw(){
+  const k=RC.ind,I=RC_IND[k],y=RC.year,ys=rcYears(k);
+  const src=I.s==='a'?RC_SRC_A:RC_SRC_I;
+  const tick=v=>I.u==='€'?abbr(v)+' €':I.u==='%'?fmt(v,0)+' %':fmt(v,I.d?1:0);
+  const tip=x=>x.dataset.label+': '+rcFmt(x.parsed.y!==undefined&&!x.chart.options.indexAxis?x.parsed.y:x.parsed.x,k);
+  /* evolución */
+  rcKill('rc_evo');
+  document.getElementById('rc_evo_t').textContent=I.l+' · evolución';
+  document.getElementById('rc_evo_src').innerHTML='Fuente: '+src;
+  const dsE=RC.sel.map(c=>Object.assign(ds(rcName(c),ys.map(yy=>rcVal(c,k,yy)),rcColor(c)),{pointRadius:3,pointHoverRadius:5,borderWidth:c===RC_MB?2.8:2,spanGaps:true,tension:.1}))
+    .concat(Object.keys(RC_REF).filter(r=>RC.refs[r]&&ys.some(yy=>rcVal(r,k,yy)!=null)).map(r=>Object.assign(ds(RC_REF[r][0],ys.map(yy=>rcVal(r,k,yy)),RC_REF[r][1]),{borderDash:RC_REF[r][2],borderWidth:1.6,spanGaps:true})));
+  charts.rc_evo=new Chart(c('rc_evo'),{type:'line',data:{labels:ys,datasets:dsE},
+    options:baseOpts({plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+rcFmt(x.parsed.y,k)}}},scales:{x:{grid:{display:false}},y:axY(tick)}})});
+  /* ranking */
+  rcKill('rc_rk');
+  const m=rcD().m||{},g=RC.grp;
+  document.querySelectorAll('#rc-rk-g button').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
+  const xs=Object.keys(m).filter(cc=>m[cc].g.includes(g)||RC.sel.includes(cc)).map(cc=>[cc,rcVal(cc,k,y)]).filter(x=>x[1]!=null).sort((a,b)=>b[1]-a[1]);
+  const refs=Object.keys(RC_REF).filter(r=>RC.refs[r]).map(r=>RC_REF[r][0]+': '+rcFmt(rcVal(r,k,y),k)).join(' · ');
+  document.getElementById('rc-rk-t').textContent=I.l+' · '+y;
+  document.getElementById('rc-rk-s').innerHTML='<span class="tag stat">ANUAL</span>'+(g==='m'?'Todos los municipios de la provincia':'Las 52 capitales de provincia')+' con dato'+(g==='c'?' (y los municipios que estés comparando)':'')+'. Marbella y tu selección, en color. '+(refs?'<span class="nota">Referencias: '+refs+'</span>':'');
+  document.getElementById('rc-rk-src').innerHTML='Fuente: '+src+(I.s==='a'?'. Sin dato: municipios de menos de 1.000 habitantes, País Vasco y Navarra.':'');
+  document.getElementById('rc-rk-w').style.height=Math.max(220,xs.length*17+40)+'px';
+  const colR=xs.map(x=>RC.sel.includes(x[0])?rcColor(x[0]):'rgba(0,0,0,.16)');
+  charts.rc_rk=new Chart(c('rc_rk'),{type:'bar',data:{labels:xs.map((x,i)=>(i+1)+'. '+rcName(x[0])),datasets:[{label:I.l,data:xs.map(x=>x[1]),backgroundColor:colR,borderRadius:4,barPercentage:.82,categoryPercentage:.9}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:{duration:300},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>rcFmt(x.parsed.x,k)}}},
+      scales:{x:Object.assign(axY(tick),{position:'top'}),y:{grid:{display:false},ticks:{autoSkip:false,font:{size:11},
+        color:ctx=>{const cc=xs[ctx.index]&&xs[ctx.index][0];return cc===RC_MB?'#0058b0':(RC.sel.includes(cc)?'#1d1d1f':'#6e6e73');}}}}}});
+  /* fuentes de ingreso */
+  rcKill('rc_fue');
+  const yF=rcLastY('f_sal');const ents=RC.sel.concat(Object.keys(RC_REF).filter(r=>RC.refs[r]));
+  document.getElementById('rc_fue_t').textContent='¿De dónde sale la renta? · '+yF;
+  document.getElementById('rc_fue_src').innerHTML='Fuente: '+RC_SRC_I+' (tabla <a href="https://www.ine.es/jaxiT3/Tabla.htm?t=30825" target="_blank" rel="noopener">30825</a>)';
+  document.getElementById('rc-fue-w').style.height=Math.max(260,ents.length*34+90)+'px';
+  charts.rc_fue=new Chart(c('rc_fue'),{type:'bar',data:{labels:ents.map(rcName),datasets:RC_FUENTES.map(([fk,l,col])=>({label:l,data:ents.map(e=>rcVal(e,fk,yF)),backgroundColor:col,borderColor:'#fff',borderWidth:{right:2},borderSkipped:false,barPercentage:.75}))},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+fmt(x.parsed.x,1)+' %'}}},
+      scales:{x:{stacked:true,max:100,grid:GRID,ticks:{callback:v=>v+' %'}},y:{stacked:true,grid:{display:false}}}}});
+  /* renta y desigualdad */
+  rcKill('rc_dis');
+  const yD=rcLastY('gini');
+  const pts=Object.keys(m).filter(cc=>(m[cc].g.includes(g)||RC.sel.includes(cc))&&rcVal(cc,'np',yD)!=null&&rcVal(cc,'gini',yD)!=null);
+  const rest=pts.filter(cc=>!RC.sel.includes(cc)),selP=RC.sel.filter(cc=>pts.includes(cc));
+  document.getElementById('rc_dis_t').textContent='Renta y desigualdad · '+yD;
+  document.getElementById('rc_dis_src').innerHTML='Fuente: '+RC_SRC_I+' (tablas 30824 y 37677)';
+  const P=cc=>({x:rcVal(cc,'np',yD),y:rcVal(cc,'gini',yD),n:rcName(cc)});
+  charts.rc_dis=new Chart(c('rc_dis'),{type:'scatter',data:{datasets:[
+      {label:g==='m'?'Resto de la provincia':'Resto de capitales',data:rest.map(P),backgroundColor:'rgba(0,0,0,.18)',pointRadius:4,pointHoverRadius:6}]
+      .concat(selP.map(cc=>({label:rcName(cc),data:[P(cc)],backgroundColor:rcColor(cc),borderColor:'#fff',borderWidth:2,pointRadius:cc===RC_MB?8:6.5,pointHoverRadius:9})))},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'},
+        tooltip:{callbacks:{label:x=>x.raw.n+': '+fmt(x.raw.x)+' € por persona · Gini '+fmt(x.raw.y,1)}}},
+      scales:{x:{grid:GRID,title:{display:true,text:'Renta neta media por persona (€)'},ticks:{callback:v=>abbr(v)+' €'}},
+              y:{grid:GRID,title:{display:true,text:'Índice de Gini'}}}}});
+  /* INE vs AEAT */
+  rcKill('rc_fis');
+  const yC=Math.min(rcLastY('bp'),rcLastY('ab'));
+  document.getElementById('rc_fis_t').textContent='INE frente a Agencia Tributaria · '+yC;
+  document.getElementById('rc_fis_src').innerHTML='Fuente: '+RC_SRC_I+' · '+RC_SRC_A;
+  const entsF=RC.sel.concat(Object.keys(RC_REF).filter(r=>RC.refs[r]));
+  const F=[['bp','INE · bruta por persona','#00a8a3'],['ab','AEAT · bruta media por declaración','#0071e3'],['abm','AEAT · bruta mediana por declaración','#9a5cd0']];
+  charts.rc_fis=new Chart(c('rc_fis'),{type:'bar',data:{labels:entsF.map(rcName),datasets:F.map(([fk,l,col])=>({label:l,data:entsF.map(e=>rcVal(e,fk,yC)),backgroundColor:col,borderRadius:4,borderColor:'#fff',borderWidth:1,maxBarThickness:34}))},
+    options:baseOpts({interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'},tooltip:{callbacks:{label:x=>x.dataset.label+': '+(x.parsed.y==null?'sin dato':fmt(x.parsed.y)+' €')}}},
+      scales:{x:{grid:{display:false}},y:axY(v=>abbr(v)+' €')}})});
+}
+
+function rcTabla(){
+  const m=rcD().m||{},g=RC.tgrp;
+  document.querySelectorAll('#rc-tb-g button').forEach(b=>b.classList.toggle('on',b.dataset.g===g));
+  const cols=['np','nh','bh','me','gini','b60','f_pen','hog','ab','abm'];
+  const short={np:'Neta/persona',nh:'Neta/hogar',bh:'Bruta/hogar',me:'Mediana UC',gini:'Gini',b60:'% pobreza',f_pen:'% pensiones',hog:'Pers./hogar',ab:'AEAT media',abm:'AEAT mediana'};
+  const rows=Object.keys(m).filter(cc=>m[cc].g.includes(g)||cc===RC_MB);
+  const sk=RC.tsort;
+  rows.sort((a,b)=>{if(sk==='n')return RC.tdir*m[a].n.localeCompare(m[b].n,'es');
+    const va=rcVal(a,sk,rcLastY(sk)),vb=rcVal(b,sk,rcLastY(sk));
+    if(va==null)return 1;if(vb==null)return -1;return RC.tdir*(va-vb);});
+  const t=document.getElementById('rc-tb');
+  t.innerHTML='<thead><tr><th data-s="n"'+(sk==='n'?' class="act"':'')+'>Municipio</th>'+cols.map(k=>'<th data-s="'+k+'" title="'+RC_IND[k].l+'"'+(sk===k?' class="act"':'')+'>'+short[k]+(sk===k?(RC.tdir<0?' ↓':' ↑'):'')+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(cc=>'<tr class="'+(cc===RC_MB?'mb ':'')+(RC.sel.includes(cc)?'sel':'')+'" style="--c:'+(RC.sel.includes(cc)?rcColor(cc):'transparent')+'"><td class="cl" data-c="'+cc+'">'+escR(rcName(cc))+'</td>'+
+      cols.map(k=>'<td>'+(rcVal(cc,k,rcLastY(k))==null?'—':fmt(rcVal(cc,k,rcLastY(k)),RC_IND[k].d||0))+'</td>').join('')+'</tr>').join('')+'</tbody>';
+  t.querySelectorAll('th').forEach(th=>th.addEventListener('click',()=>{const s=th.dataset.s;
+    if(RC.tsort===s)RC.tdir=-RC.tdir;else{RC.tsort=s;RC.tdir=s==='n'?1:-1;}rcTabla();}));
+  t.querySelectorAll('td.cl').forEach(td=>td.addEventListener('click',()=>rcToggle(td.dataset.c)));
 }
 
 /* ================= DEMOGRAFÍA ================= */

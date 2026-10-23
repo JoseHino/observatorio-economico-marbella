@@ -294,15 +294,317 @@ def renta():
     except Exception as e:
         print(f"    ! renta 30824: {e}")
     try:
-        d = tabla_series("30831", "19:2822")
-        # riesgo de pobreza relativa = % población por debajo del 60% de la mediana
-        rp = serie_anual_from(d, "total. total", "debajo 60")
-        if not rp:
-            rp = serie_anual_from(d, "debajo 60")
-        out["riesgo_pobreza"] = rp
+        # Riesgo de pobreza relativa = % de población bajo el 60 % de la mediana.
+        # Va en la 30829 (umbrales relativos por sexo), serie "Total". Antes se leía
+        # de la 30831, que es POR NACIONALIDAD y no trae total para Marbella: se
+        # colaba la serie de la población española (19,9 % en 2024 frente al 21,7 %
+        # del conjunto).
+        d = tabla_series("30829", "19:2822")
+        out["riesgo_pobreza"] = serie_anual_from(d, "total. población", "debajo 60%")
     except Exception as e:
-        print(f"    ! renta 30831: {e}")
+        print(f"    ! renta 30829: {e}")
     write("renta.json", out)
+
+# ---------------------------------------------------------------- RENTA · COMPARADOR
+# Todos los municipios de la provincia de Málaga y las 52 capitales de provincia
+# (más Ceuta y Melilla), con dos fuentes que miden cosas distintas a propósito:
+#
+#  · INE, Atlas de distribución de renta (ADRH): renta de los HOGARES residentes,
+#    por persona, por hogar y por unidad de consumo; desigualdad (Gini, P80/P20),
+#    pobreza relativa, fuentes de ingreso y demografía. Recorta a cada contribuyente
+#    en ±3 M€, así que unos pocos ricos extremos apenas mueven la media.
+#  · AEAT, declarantes del IRPF por municipios (>1.000 hab., sin País Vasco ni
+#    Navarra): renta media y MEDIANA por DECLARACIÓN, sin recorte. Es la que dio a
+#    Benahavís como 2.º de España en 2024 mientras el INE lo bajaba al 26.º de la
+#    provincia en renta neta por hogar.
+#
+# Las tablas "nacionales" del ADRH (30824, 30825, 30829, 30832 y 37677) admiten
+# cualquier municipio filtrando la variable 19, y varios a la vez repitiendo tv=:
+# 155 municipios salen en unas 40 peticiones. España, Andalucía y la provincia se
+# leen de las tablas NAC-CCAA-PROV (536xx).
+#
+# Son datos anuales con ~2 años de desfase: no se recalcula en cada pasada de seis
+# horas. Se rehace cuando el INE publica un año nuevo (lo detecta renta(), que corre
+# antes) o, como mucho, cada 30 días para recoger revisiones. De la AEAT solo se
+# bajan los ejercicios que aún no están: los publicados no se revisan.
+CAPITALES = {
+    "01059": "Álava", "02003": "Albacete", "03014": "Alicante", "04013": "Almería",
+    "05019": "Ávila", "06015": "Badajoz", "07040": "Illes Balears", "08019": "Barcelona",
+    "09059": "Burgos", "10037": "Cáceres", "11012": "Cádiz", "12040": "Castellón",
+    "13034": "Ciudad Real", "14021": "Córdoba", "15030": "A Coruña", "16078": "Cuenca",
+    "17079": "Girona", "18087": "Granada", "19130": "Guadalajara", "20069": "Gipuzkoa",
+    "21041": "Huelva", "22125": "Huesca", "23050": "Jaén", "24089": "León",
+    "25120": "Lleida", "26089": "La Rioja", "27028": "Lugo", "28079": "Madrid",
+    "29067": "Málaga", "30030": "Murcia", "31201": "Navarra", "32054": "Ourense",
+    "33044": "Asturias", "34120": "Palencia", "35016": "Las Palmas", "36038": "Pontevedra",
+    "37274": "Salamanca", "38038": "Santa Cruz de Tenerife", "39075": "Cantabria",
+    "40194": "Segovia", "41091": "Sevilla", "42173": "Soria", "43148": "Tarragona",
+    "44216": "Teruel", "45168": "Toledo", "46250": "Valencia", "47186": "Valladolid",
+    "48020": "Bizkaia", "49275": "Zamora", "50297": "Zaragoza", "51001": "Ceuta",
+    "52001": "Melilla",
+}
+# (tabla municipal, tabla NAC-CCAA-PROV, {clave: needles del nombre de la serie})
+_ADRH_TABLAS = [
+    ("30824", "53689", {
+        "np": ["renta neta media por persona"], "nh": ["renta neta media por hogar"],
+        "bp": ["renta bruta media por persona"], "bh": ["renta bruta media por hogar"],
+        "mu": ["media de la renta por unidad"], "me": ["mediana de la renta por unidad"]}),
+    ("30825", "53687", {
+        "f_sal": ["fuente de ingreso: salario"], "f_pen": ["fuente de ingreso: pensiones"],
+        "f_des": ["fuente de ingreso: prestaciones por desempleo"],
+        "f_otp": ["fuente de ingreso: otras prestaciones"], "f_otr": ["fuente de ingreso: otros ingresos"]}),
+    ("37677", "53688", {"gini": ["índice de gini"], "p8020": ["p80/p20"]}),
+    ("30829", "53694", {
+        "b60": ["total. población", "debajo 60%"], "b40": ["total. población", "debajo 40%"],
+        "e200": ["total. población", "encima 200%"]}),
+    ("30832", "53776", {
+        "hog": ["tamaño medio del hogar"], "edad": ["edad media"], "m18": ["menor de 18"],
+        "e65": ["65 y más"], "unip": ["unipersonales"], "esp": ["población española"],
+        "pob": [". población. dato base"]}),
+]
+_REF_INE = {"ES": "total nacional", "AN": "andalucía", "PM": "málaga"}
+AEAT_IRPF = ("https://sede.agenciatributaria.gob.es/AEAT/Contenidos_Comunes/La_Agencia_Tributaria/"
+             "Estadisticas/Publicaciones/sites/irpfmunicipios/{y}/")
+
+def _adrh_cod_mun(serie):
+    """Código INE del municipio de una serie pedida con tip=AM (variable 19)."""
+    for m in serie.get("MetaData") or []:
+        if m.get("T3_Variable") == "Municipios" and re.fullmatch(r"\d{5}", m.get("Codigo") or ""):
+            return m["Codigo"]
+    return None
+
+def _adrh_clave(nombre, needles):
+    n = nombre.lower()
+    return next((k for k, nd in needles.items() if all(x in n for x in nd)), None)
+
+def _adrh_puntos(serie):
+    return {int(p["Anyo"]): p["Valor"] for p in serie.get("Data") or []
+            if p.get("Valor") is not None and not p.get("Secreto")}
+
+def _adrh_municipios(ids):
+    """{codigo: {clave: {año: valor}}} para los municipios pedidos (Id INE de la var. 19)."""
+    out = {}
+    lotes = [ids[i:i + 20] for i in range(0, len(ids), 20)]
+
+    def pide(tabla, lote, retries=3):
+        tv = "&".join(f"tv=19:{i}" for i in lote)
+        return json.loads(_get(f"{INE_TBL}{tabla}?{tv}&tip=AM", retries=retries).decode("utf-8"))
+
+    for tabla, _, needles in _ADRH_TABLAS:
+        print(f"    · ADRH {tabla}: {len(lotes)} lotes", flush=True)
+        for lote in lotes:
+            try:
+                series = pide(tabla, lote)
+            except urllib.error.HTTPError:
+                # El INE contesta 500 a TODO el lote si uno de los municipios no está
+                # en la tabla: se repite uno a uno para no perder los demás.
+                series, sin = [], 0
+                for i in lote:
+                    try:
+                        series += pide(tabla, [i], retries=1)
+                    except urllib.error.HTTPError:
+                        sin += 1
+                print(f"      lote con {sin} municipio(s) sin dato en {tabla}", flush=True)
+            except Exception as e:
+                print(f"    ! ADRH {tabla}: {e}")
+                continue
+            for s in series:
+                cod, k = _adrh_cod_mun(s), _adrh_clave(s.get("Nombre", ""), needles)
+                if cod and k:
+                    out.setdefault(cod, {})[k] = _adrh_puntos(s)
+    return out
+
+def _adrh_referencias():
+    """España, Andalucía y provincia de Málaga desde las tablas NAC-CCAA-PROV."""
+    out = {}
+    for _, tabla, needles in _ADRH_TABLAS:
+        try:
+            series = get_json(f"{INE_TBL}{tabla}")
+        except Exception as e:
+            print(f"    ! ADRH {tabla}: {e}")
+            continue
+        for s in series:
+            nombre = s.get("Nombre", "")
+            terr = nombre.split(".")[0].strip().lower()
+            ref = next((r for r, t in _REF_INE.items() if terr == t), None)
+            k = _adrh_clave(nombre, needles)
+            if ref and k:
+                out.setdefault(ref, {})[k] = _adrh_puntos(s)
+    return out
+
+def _aeat_html(url):
+    raw = _get(url, timeout=180)
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", "replace")
+
+def _aeat_anio(y):
+    """{codigo|ref: {ab, abm, ad, adm, decl, pos}} del ejercicio y, o None si no hay.
+
+    Las páginas de la AEAT llevan un hash en el nombre que cambia cada año: se llega a
+    la tabla por el mapa del sitio, buscando el enlace por su texto.
+    """
+    import html as _h
+    base = AEAT_IRPF.format(y=y)
+    try:
+        home = _aeat_html(base + "home.html")
+    except Exception:
+        return None
+    m = re.search(r'href="(mapa[0-9a-f]+\.html)"', home)
+    if not m:
+        return None
+    mapa = _aeat_html(base + m.group(1))
+    enlace = None
+    for href, txt in re.findall(r'href="(jrubik[0-9a-f]+\.html)"[^>]*>(.*?)</a>', mapa, re.S):
+        if " ".join(_h.unescape(re.sub("<[^>]+>", "", txt)).split()).startswith("Posicionamiento de los municipios"):
+            enlace = href
+            break
+    if not enlace:
+        return None
+    pagina = _aeat_html(base + enlace)
+    celdas = lambda fila: [" ".join(_h.unescape(re.sub("<[^>]+>", "", c)).split())
+                           for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", fila, re.S)]
+    filas = [celdas(f) for f in re.findall(r"<tr[^>]*>(.*?)</tr>", pagina, re.S)]
+    cab = next((f for f in filas if any("RENTA BRUTA MEDIA" in c for c in f)), None)
+    if not cab:
+        return None
+    def col(*txt):
+        return next((i for i, c in enumerate(cab) if all(t in c.replace(" ", "") for t in txt)), None)
+    idx = {"decl": col("DECLARACIONES"), "pos": col("NIVELNACIONAL"),
+           "ab": col("RENTABRUTAMEDIA"), "abm": col("RENTABRUTAMEDIANA"),
+           "ad": col("DISPONIBLEMEDIA"), "adm": col("DISPONIBLEMEDIANA")}
+    # "RENTA BRUTA MEDIA" es prefijo de "...MEDIANA" y "...NIVELNACIONAL" también lo
+    # contiene: se fijan por posición exacta.
+    for k, t in (("ab", "RENTABRUTAMEDIA"), ("ad", "RENTADISPONIBLEMEDIA")):
+        idx[k] = next((i for i, c in enumerate(cab) if c.replace(" ", "") == t), idx[k])
+    num = lambda s: float(s.replace(".", "").replace(",", ".")) if re.fullmatch(r"-?[\d.]+(,\d+)?", s or "") else None
+    out = {}
+    for f in filas:
+        if len(f) < len(cab) or not f[0]:
+            continue
+        mm = re.search(r"-(\d{5})$", f[0])
+        if mm:
+            clave = mm.group(1)
+        elif f[0] == "Total":
+            clave = "ES"
+        elif re.match(r"^Andaluc", f[0]):
+            clave = "AN"
+        elif re.match(r"^M.laga$", f[0]):
+            clave = "PM"
+        else:
+            continue
+        out[clave] = {k: num(f[i]) for k, i in idx.items() if i is not None}
+    return out or None
+
+def renta_comparador():
+    step("Renta · comparador (INE ADRH municipios de Málaga + capitales · AEAT IRPF)")
+    NOMBRE = "renta_comparador.json"
+    prev = _leer(NOMBRE) or {}
+    hoy = datetime.date.today()
+
+    # ¿Hace falta rehacer lo del INE?
+    marbella = (_leer("renta.json") or {}).get("neta_persona") or []
+    ult_ine = max((p["y"] for p in marbella), default=None)
+    prev_ine = ((prev.get("anios") or {}).get("ine") or {}).get("y")
+    try:
+        edad = (hoy - datetime.date.fromisoformat(prev.get("ine_bajado") or "2000-01-01")).days
+    except ValueError:
+        edad = 999
+    rehacer_ine = not prev.get("m") or (ult_ine and ult_ine != prev_ine) or edad > 30
+
+    # Lo ya publicado, desplegado otra vez a {año: valor}, para rehacer solo una parte
+    def _despliega(bloque, anios):
+        return {k: {y: v for y, v in zip(anios, s) if v is not None} for k, s in (bloque or {}).items()}
+    prev_terr = dict(prev.get("m") or {})
+    prev_terr.update(prev.get("ref") or {})
+    aeat_prev = {}
+    for cod, b in prev_terr.items():
+        for k, pts in _despliega(b.get("a"), prev.get("years_aeat") or []).items():
+            for y, v in pts.items():
+                aeat_prev.setdefault(str(y), {}).setdefault(cod, {})[k] = v
+
+    # ¿Hay ejercicios nuevos de la AEAT? (los publicados no cambian)
+    hechos = set(prev.get("years_aeat") or [])
+    nuevos = {}
+    for y in range(2013, hoy.year):
+        if y in hechos:
+            continue
+        d = _aeat_anio(y)
+        if d:
+            nuevos[str(y)] = d
+            print(f"    · AEAT {y}: {len(d)} territorios")
+    if not rehacer_ine and not nuevos:
+        print("    sin novedades (INE %s, AEAT hasta %s)" % (prev_ine, max(hechos, default="—")))
+        return
+
+    # Municipios: Id INE de la variable 19 para cada código
+    vals = get_json("https://servicios.ine.es/wstempus/js/ES/VALORES_VARIABLE/19")
+    por_cod = {v["Codigo"]: v for v in vals if re.fullmatch(r"\d{5}", v.get("Codigo") or "")}
+    malaga = sorted(c for c in por_cod if c.startswith("29"))
+    faltan = [c for c in CAPITALES if c not in por_cod]
+    if faltan:
+        print(f"    ! capitales sin código en el INE: {faltan}")
+    codigos = sorted(set(malaga) | (set(CAPITALES) - set(faltan)))
+
+    if rehacer_ine:
+        ine = _adrh_municipios([por_cod[c]["Id"] for c in codigos])
+        ref = _adrh_referencias()
+        if not ine:
+            print("    ! el INE no ha devuelto nada: se conserva lo publicado")
+            ine, ref = None, None
+    else:
+        ine, ref = None, None
+
+    aeat = dict(aeat_prev)
+    aeat.update(nuevos)
+    anios_aeat = sorted(int(y) for y in aeat)
+
+    if ine is None:                       # se reconstruye sobre lo ya publicado
+        ine = {c: _despliega(b.get("i"), prev.get("years_ine") or [])
+               for c, b in (prev.get("m") or {}).items()}
+        ref = {r: _despliega(b.get("i"), prev.get("years_ine") or [])
+               for r, b in (prev.get("ref") or {}).items()}
+    anios_ine = sorted({int(y) for d in list(ine.values()) + list(ref.values())
+                        for s in d.values() for y in s})
+
+    def bloque(i_raw, cod_aeat):
+        # series alineadas con years_ine / years_aeat (null donde no hay dato)
+        i = {k: [v.get(y) for y in anios_ine] for k, v in (i_raw or {}).items()}
+        a = {}
+        for k in ("ab", "abm", "ad", "adm", "decl", "pos"):
+            s = [((aeat.get(str(y)) or {}).get(cod_aeat) or {}).get(k) for y in anios_aeat]
+            if any(v is not None for v in s):
+                a[k] = s
+        return {"i": i, "a": a}
+
+    m = {}
+    for c in codigos:
+        if c not in ine and not any(c in d for d in aeat.values()):
+            continue
+        g = (["m"] if c.startswith("29") else []) + (["c"] if c in CAPITALES else [])
+        b = bloque(ine.get(c), c)
+        b.update({"n": por_cod[c]["Nombre"], "g": g})
+        if c in CAPITALES:
+            b["p"] = CAPITALES[c]
+        m[c] = b
+    nombres_ref = {"ES": "España", "AN": "Andalucía", "PM": "Provincia de Málaga"}
+    refs = {}
+    for r, n in nombres_ref.items():
+        b = bloque(ref.get(r), r)
+        b["n"] = n
+        refs[r] = b
+
+    out = {
+        # periodos {y} para que el vigilante de frescura sepa qué año hay
+        "anios": {"ine": {"y": max(anios_ine)} if anios_ine else {},
+                  "aeat": {"y": max(anios_aeat)} if anios_aeat else {}},
+        "ine_bajado": hoy.isoformat() if rehacer_ine and ine else prev.get("ine_bajado"),
+        "years_ine": anios_ine, "years_aeat": anios_aeat,
+        "m": m, "ref": refs,
+    }
+    print(f"    {len(m)} municipios · INE {anios_ine[:1]}–{anios_ine[-1:]} · AEAT {anios_aeat[:1]}–{anios_aeat[-1:]}")
+    write(NOMBRE, out)
 
 # ---------------------------------------------------------------- DEMOGRAFÍA
 def demografia():
@@ -2082,6 +2384,8 @@ _FRESCURA_MAX = {
     "coyuntura.json": 3,
     "paro_anual.json": 16, "empresas.json": 20,
     "renta.json": _ATLAS_INE, "demografia.json": 14,
+    # INE ADRH y AEAT IRPF municipal: ambos anuales con ~2 años de desfase
+    "renta_comparador.json": _ATLAS_INE,
     # sima.json: medias anuales del IECA; el año N completo sale en el 1T de N+1
     "sima.json": 16,
     # vivienda_marbella.json: MIVAU trimestral, ~3 meses tras cerrar el trimestre
@@ -2255,7 +2559,7 @@ def main():
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
     # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
-    for fn in (turismo, renta, demografia, empresas, vivienda, coyuntura, sociedades,
+    for fn in (turismo, renta, renta_comparador, demografia, empresas, vivienda, coyuntura, sociedades,
                afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
                turismo_moviles, deuda_viva, argos_historico,
                contexto_ia, series_ia,    # resumen todo lo anterior para la IA
