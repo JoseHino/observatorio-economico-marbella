@@ -913,7 +913,7 @@ function buildRenta(){
    '<div class="card full" style="margin-bottom:18px"><h3>¿Quién es el más rico de la provincia? Depende de cómo se mida</h3>'+
      '<div class="cs"><span class="tag stat">ANUAL</span>'+geoTag('Provincia de Málaga')+'Municipio que encabeza la provincia en cada indicador, y puesto de Marbella. Pulsa un indicador para verlo en el comparador.</div>'+
      '<div class="tscroll"><table class="tbl lid" id="rc-lid"></table></div>'+
-     '<div class="src">Fuente: <a href="https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736177088&menu=ultiDatos&idp=1254735976608" target="_blank" rel="noopener">INE · Atlas de distribución de renta de los hogares</a> · <a href="https://sede.agenciatributaria.gob.es/Sede/estadisticas/estadisticas-impuesto/estadistica-declarantes-irpf-municipios.html" target="_blank" rel="noopener">AEAT · Estadística de los declarantes del IRPF por municipios</a></div></div>'+
+     '<div class="src">Fuente: <a href="https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736177088&menu=ultiDatos&idp=1254735976608" target="_blank" rel="noopener">INE · Atlas de distribución de renta de los hogares</a> · <a href="https://sede.agenciatributaria.gob.es/AEAT/Contenidos_Comunes/La_Agencia_Tributaria/Estadisticas/Publicaciones/sites/irpfmunicipios/2024/home.html" target="_blank" rel="noopener">AEAT · Estadística de los declarantes del IRPF por municipios</a></div></div>'+
    '<div class="h2" style="font-size:24px;margin-top:26px">Comparador</div>'+
    '<div class="rc-bar" id="rc-bar"></div>'+
    '<div class="grid">'+
@@ -940,7 +940,7 @@ function rcCard(id,t,sub,wid,full){
     '<div class="cwrap" id="'+wid+'"><canvas id="'+id+'"></canvas></div><div class="src" id="'+id+'_src"></div></div>';
 }
 const RC_SRC_I='<a href="https://www.ine.es/dyngs/INEbase/operacion.htm?c=Estadistica_C&cid=1254736177088&menu=ultiDatos&idp=1254735976608" target="_blank" rel="noopener">INE · Atlas de distribución de renta de los hogares</a>';
-const RC_SRC_A='<a href="https://sede.agenciatributaria.gob.es/Sede/estadisticas/estadisticas-impuesto/estadistica-declarantes-irpf-municipios.html" target="_blank" rel="noopener">AEAT · Estadística de los declarantes del IRPF por municipios</a>';
+const RC_SRC_A='<a href="https://sede.agenciatributaria.gob.es/AEAT/Contenidos_Comunes/La_Agencia_Tributaria/Estadisticas/Publicaciones/sites/irpfmunicipios/2024/home.html" target="_blank" rel="noopener">AEAT · Estadística de los declarantes del IRPF por municipios</a>';
 
 function rcKpis(){
   const K=[['np','Renta neta por persona'],['nh','Renta neta por hogar'],['me','Renta mediana por unidad de consumo'],['gini','Índice de Gini (desigualdad)'],['b60','Riesgo de pobreza'],['abm','Renta bruta mediana por declaración (AEAT)']];
