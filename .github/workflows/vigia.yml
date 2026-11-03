@@ -1,0 +1,66 @@
+name: Vigía de fuentes (dato nuevo → se publica al momento)
+
+# Cada 10 minutos en horario de publicación (las fuentes oficiales publican en
+# días laborables por la mañana: INE y Ministerio a las 9:00, Argos en la rueda
+# de prensa del paro, IECA a lo largo del día) y cada hora el resto del tiempo.
+# vigia.py solo pregunta a cada fuente cuál es su último mes (~30 s); si alguna
+# va por delante de lo publicado, se descarga ÚNICAMENTE esa fuente.
+#
+# Los minutos van desfasados (7, 17, 27…) a propósito: GitHub retrasa y descarta
+# muchas ejecuciones programadas en punto, cuando hay más carga.
+# La pasada completa (update.yml) sigue como red de seguridad y para lo anual.
+on:
+  schedule:
+    - cron: '7-59/10 5-18 * * 1-5'    # 06:00–19:59 (invierno) cada 10 min, lun–vie
+    - cron: '37 0-4,19-23 * * 1-5'    # resto de horas laborables: cada hora
+    - cron: '37 * * * 0,6'            # fines de semana: cada hora
+  workflow_dispatch:
+    inputs:
+      todo:
+        description: 'Revisar también las sondas pesadas (MIVAU, móviles)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vigia
+  cancel-in-progress: false
+
+jobs:
+  vigilar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias
+        run: pip install xlrd==2.0.1 openpyxl==3.1.5
+
+      - name: Preguntar a las fuentes si hay mes nuevo
+        id: vigia
+        run: python vigia.py ${{ inputs.todo && '--todo' || '' }}
+
+      - name: Descargar solo las fuentes con dato nuevo
+        if: steps.vigia.outputs.grupos != ''
+        continue-on-error: true
+        run: python fetch_data.py --solo "${{ steps.vigia.outputs.grupos }}"
+
+      - name: Publicar
+        if: steps.vigia.outputs.grupos != ''
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then
+            echo "La fuente anunciaba dato nuevo pero no ha cambiado nada."
+          else
+            git commit -m "Dato nuevo: ${{ steps.vigia.outputs.grupos }} ($(date -u +%Y-%m-%d\ %H:%M) UTC)"
+            git pull --rebase -X theirs
+            git push
+          fi

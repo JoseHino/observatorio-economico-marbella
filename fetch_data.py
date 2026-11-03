@@ -2555,15 +2555,46 @@ def auditar_frescura():
     return rep, alertas
 
 # ---------------------------------------------------------------- MAIN
-def main():
+# Grupos de fuentes que se pueden refrescar por separado (python fetch_data.py
+# --solo laboral,turismo). Los usa vigia.py: en cuanto una fuente publica un mes
+# nuevo, se descarga SOLO esa fuente y se recalculan los derivados, sin esperar a
+# la pasada completa ni gastar diez minutos en bajar todo lo demás.
+GRUPOS = {
+    "laboral":           ("sepe_laboral", "paro_anual", "argos_historico"),
+    "afiliacion":        ("afiliacion",),
+    "turismo":           ("turismo",),
+    "coyuntura":         ("coyuntura",),
+    "vivienda":          ("vivienda",),
+    "sociedades":        ("sociedades",),
+    "turismo_moviles":   ("turismo_moviles",),
+    "vivienda_marbella": ("vivienda_marbella",),
+    "bce":               (),          # euríbor y libra: entran por indice_crisis
+}
+DERIVADOS = ("contexto_ia", "series_ia", "indice_crisis")   # siempre al final
+
+def _funciones(argv):
+    """Lista de funciones a ejecutar según los argumentos (todas por defecto)."""
+    if "--solo" in argv:
+        pedidos = [g.strip() for g in argv[argv.index("--solo") + 1].split(",") if g.strip()]
+        nombres = []
+        for g in pedidos:
+            if g not in GRUPOS:
+                raise SystemExit(f"grupo desconocido: {g} (válidos: {', '.join(GRUPOS)})")
+            nombres += [n for n in GRUPOS[g] if n not in nombres]
+        print(f"== Solo: {', '.join(pedidos)} ==")
+        return [globals()[n] for n in nombres + list(DERIVADOS)]
+    # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
+    return [turismo, renta, renta_comparador, demografia, empresas, vivienda, coyuntura, sociedades,
+            afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
+            turismo_moviles, deuda_viva, argos_historico,
+            contexto_ia, series_ia,    # resumen todo lo anterior para la IA
+            indice_crisis]             # lee series_ia.json
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
-    # paro_anual va detrás de sepe_laboral: se calcula con los meses que aquél escribe.
-    for fn in (turismo, renta, renta_comparador, demografia, empresas, vivienda, coyuntura, sociedades,
-               afiliacion, sepe_laboral, paro_anual, sima_marbella, vivienda_marbella,
-               turismo_moviles, deuda_viva, argos_historico,
-               contexto_ia, series_ia,    # resumen todo lo anterior para la IA
-               indice_crisis):            # lee series_ia.json
+    for fn in _funciones(argv):
         try:
             fn()
         except Exception as e:
