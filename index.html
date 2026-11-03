@@ -1494,10 +1494,11 @@ function extraTurismo2(){
     if(it.length>=12)k.push(kpi(fmt(sum12(it)),'Turistas extranjeros · últimos 12 meses','',''));
     html+='<div class="h2" style="margin-top:34px">Todos los turistas · medición con teléfonos móviles</div>'+
      '<div class="pdesc">El INE cuenta, a partir de la posición de los móviles, a <b>todas</b> las personas que pasan al menos una noche en Marbella sin residir en ella (en hotel, apartamento, vivienda turística, casa propia o de amigos), no solo a las alojadas en hoteles. Es una estadística experimental.</div>'+
+     '<div class="pdesc"><b>Aviso:</b> el INE dejó de actualizar la serie de turistas <b>extranjeros</b> en diciembre de 2025 porque está integrando los datos de las operadoras móviles en FRONTUR. Las cifras municipales volverán dentro de FRONTUR, sin fecha anunciada y no comparables con esta serie. La de turistas españoles sigue actualizándose cada mes.</div>'+
      '<div class="kpis">'+k.join('')+'</div>'+
      '<div class="grid">'+
-      card('c_tm_evol','Turistas al mes',geoTag('Marbella')+'Extranjeros y españoles residentes en otras provincias'+nota('Mensual. INE · medición del turismo con móviles. El dato de extranjeros se publica con más retraso que el nacional.'),'live',SRC_TMOV_INT,true)+
-      card('c_tm_paises','Principales países de origen',geoTag('Marbella')+'Turistas extranjeros en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 52048.'),'live',SRC_TMOV_INT)+
+      card('c_tm_evol','Turistas al mes',geoTag('Marbella')+'Extranjeros y españoles residentes en otras provincias'+nota('Mensual. INE · medición del turismo con móviles. La serie de extranjeros termina en diciembre de 2025: el INE la cerró para integrarla en FRONTUR.'),'live',SRC_TMOV_INT,true)+
+      card('c_tm_paises','Principales países de origen',geoTag('Marbella')+'Turistas extranjeros en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 52048 (cerrada en diciembre de 2025).'),'live',SRC_TMOV_INT)+
       card('c_tm_ccaa','Turismo nacional por comunidad de origen',geoTag('Marbella')+'Turistas españoles en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 53464. No incluye a los residentes en la provincia de Málaga.'),'live',SRC_TMOV_NAC)+
      '</div>';
   }
