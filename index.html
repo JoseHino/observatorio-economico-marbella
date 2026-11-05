@@ -542,7 +542,7 @@ function buildLaboral(){
    '<div class="grid">'+
     card('c_paro','Paro registrado',geoTag('Marbella')+'<span id="paro-sub">Personas paradas registradas al cierre de cada mes, por sexo</span>'+nota('Mensual desde 2006; en vista anual, media de los meses de cada año (* = año incompleto). Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosParoSrc(),true)+
     card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'<span id="parosec-sub">Personas paradas registradas al cierre de cada mes, por sector de procedencia</span>'+nota('Mensual desde 2006; en vista anual, media de los meses de cada año (* = año incompleto). Desglose del SEPE: no lo publicó de mayo a diciembre de 2013.'),'live',sepeSrc(),true)+
-    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'<span id="paroedad-sub">Estructura del último mes — útil para empleo juvenil y senior</span>'+nota('Mensual desde 2006 o media de un año. Elige el periodo con el selector.'),'live',sepeSrc(),true)+
+    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'<span id="paroedad-sub">Personas paradas registradas al cierre de cada mes, por tramo de edad — útil para empleo juvenil y senior</span>'+nota('Mensual desde 2006; en vista anual, media de los meses de cada año (* = año incompleto). Desglose del SEPE.'),'live',sepeSrc(),true)+
    '</div>'+anualHtml;
   const s=(DATA.paro_mensual||{}).serie||[];
   if(s.length){
@@ -565,9 +565,15 @@ function buildLaboral(){
         datasets:SK.map(([n,k,cl],i)=>Object.assign(ds(n,col(k),cl,i===0),A?{pointRadius:3}:{}))},
         options:baseOpts({interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
     const EK=[['Menor de 25','menor25',COL.c4],['25 a 44','de25a44',COL.c1],['45 y más','mayor45',COL.c6]];
-    periodPicker('c_paro_edad',s.filter(x=>x.edad),'Media anual',(rs,lbl,an)=>{
-      setSub('paroedad-sub',(an?'Paro medio de ':'Paro de ')+lbl+' por tramo de edad');
-      redraw('c_paro_edad',()=>barCat('c_paro_edad',EK.map(e=>e[0]),EK.map(([n,k])=>avgF(rs,x=>x.edad[k])),EK.map(e=>e[2]),'personas'));});
+    // serie completa por tramo de edad, como la del paro total y la de sectores
+    const PE=rellenaMeses(s.filter(x=>x.edad));
+    vistaToggle('c_paro_edad',v=>{
+      const A=v==='anio'?anualDe(PE.filter(x=>x.edad)):null;
+      setSub('paroedad-sub',A?'Paro registrado medio de cada año, por tramo de edad':'Personas paradas registradas al cierre de cada mes, por tramo de edad — útil para empleo juvenil y senior');
+      const col=k=>A?A.map(y=>avgF(y.rs,x=>x.edad[k])):PE.map(x=>x.edad?x.edad[k]:null);
+      return new Chart(c('c_paro_edad'),{type:'line',data:{labels:A?A.map(y=>y.lbl):PE.map(x=>lblMes(x.t)),
+        datasets:EK.map(([n,k,cl])=>Object.assign(ds(n,col(k),cl),A?{pointRadius:3}:{}))},
+        options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
   }
 }
 
