@@ -1777,7 +1777,7 @@ function extraCoyuntura(){
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
     card('c_matric','Vehículos matriculados',geoTag('Marbella')+'Matriculaciones de cada mes'+nota('Mensual, publicado por años completos. IECA a partir de la DGT. En vista anual, total de cada año (* = año incompleto).'),'stat',SRC_SIMA(1274),true)+
-    card('c_elec','Consumo de electricidad por sector',geoTag('Marbella')+'MWh al año (apilado)'+nota('Anual. IECA, a partir de datos de la distribuidora (Endesa).'),'stat',SRC_SIMA(39837),true)+
+    card('c_elec','Consumo de electricidad por sector',geoTag('Marbella')+'MWh consumidos cada año, una línea por sector'+nota('Anual. IECA, a partir de datos de la distribuidora (Endesa).'),'stat',SRC_SIMA(39837),true)+
     card('c_vehic','Parque de vehículos',geoTag('Marbella')+'Turismos, motocicletas y furgonetas en circulación'+nota('Anual. IECA a partir de la DGT.'),'stat',SRC_SIMA(1231))+
     card('c_deuda','Deuda viva del Ayuntamiento',geoTag('Ayuntamiento de Marbella')+'Millones de euros a 31 de diciembre y euros por habitante'+nota('Anual. Ministerio de Hacienda; el 31-12 del año N se publica a mediados de N+1.'),'stat',SRC_DEUDA)+
    '</div>');
@@ -1786,8 +1786,8 @@ function extraCoyuntura(){
       options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})}),'sum');}
   if(EL.length){const sec=['Sector residencial','Comercio_Servicios','Industria','Administración-Servicios públicos','Agricultura','Resto'];
     const lbl={'Comercio_Servicios':'Comercio y servicios','Administración-Servicios públicos':'Administración y servicios públicos'};
-    charts.elec=new Chart(c('c_elec'),{type:'bar',data:{labels:EL.map(x=>x.y),datasets:sec.map((s,i)=>({label:lbl[s]||s,data:EL.map(x=>x[s]??null),backgroundColor:hexA(PAL[i],.85),stack:'e'}))},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});}
+    // una línea por sector a lo largo de los años, como el resto de desgloses
+    charts.elec=new Chart(c('c_elec'),lineYear(EL.map(x=>x.y),sec.map((s,i)=>Object.assign(ds(lbl[s]||s,EL.map(x=>x[s]??null),PAL[i]),{pointRadius:3}))));}
   if(VH.length)charts.vehic=new Chart(c('c_vehic'),lineYear(VH.map(x=>x.y),[ds('Turismos',VH.map(x=>x.Turismos??null),COL.c1,true),ds('Motocicletas',VH.map(x=>x.Motocicletas??null),COL.c4),ds('Furgonetas',VH.map(x=>x.Furgonetas??null),COL.c3)]));
   if(DV.length){charts.deuda=new Chart(c('c_deuda'),{type:'bar',data:{labels:DV.map(x=>x.y),datasets:[
       {label:'Deuda viva (M€)',data:DV.map(x=>+(x.v/1e6).toFixed(1)),backgroundColor:hexA(COL.c2,.75),borderRadius:3,yAxisID:'y'},
