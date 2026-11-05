@@ -599,8 +599,8 @@ function buildAfiliacion(){
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
     card('c_afi_tot','Evolución de afiliados',geoTag('Marbella')+'Total de afiliados a la Seguridad Social, fin de cada periodo'+nota('Mensual desde jul-2021; trimestral antes (2012-2021). IECA · afiliación. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
-    card('c_afi_reg','Composición por régimen',geoTag('Marbella')+'<span id="afi-reg-mes">Reparto de los afiliados por régimen</span>'+nota('Mensual desde jul-2021 y trimestral antes (desde 2012), o media de un año. Elige el periodo con el selector.'),'live',SRC_AFI)+
-    card('c_afi_auto','Autónomos (RETA)',geoTag('Marbella')+'Afiliados en el Régimen Especial de Trabajadores Autónomos'+nota('Mensual. IECA · afiliación. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI)+
+    card('c_afi_reg','Composición por régimen',geoTag('Marbella')+'<span id="afi-reg-mes">Afiliados en cada régimen al final de cada periodo</span>'+nota('Mensual desde jul-2021 y trimestral antes (desde 2012); en vista anual, media de cada año (* = año incompleto). IECA · afiliación.'),'live',SRC_AFI,true)+
+    card('c_afi_auto','Autónomos (RETA)',geoTag('Marbella')+'Afiliados en el Régimen Especial de Trabajadores Autónomos'+nota('Mensual. IECA · afiliación. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
     card('c_afi_evo','Evolución por régimen',geoTag('Marbella')+'Composición de la afiliación por régimen a lo largo del tiempo (apilado)'+nota('Mensual desde jul-2021; trimestral antes. Los cinco regímenes suman el total de afiliados. El General incluye el Régimen Especial de la Minería del Carbón (residual). En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
    '</div>'+
    '<div class="h2" style="margin-top:24px">Comparativa territorial</div>'+
@@ -616,9 +616,15 @@ function buildAfiliacion(){
     options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})}),'avg');}
   // doughnut composición por régimen (último periodo)
   {const M={};AFI_REGS.concat([['total']]).forEach(([key])=>afiClean(mb[key]).forEach(p=>{(M[p.t]=M[p.t]||{t:p.t})[key]=p.v;}));
-   periodPicker('c_afi_reg',Object.keys(M).sort().map(t=>M[t]).filter(x=>x.total!=null),'Media anual',(rs,lbl,an)=>{
-     setSub('afi-reg-mes',(an?'Afiliados medios de ':'Afiliados en ')+lbl+' por régimen');
-     redraw('c_afi_reg',()=>doughnut('c_afi_reg',AFI_REGS.map(([key,nm,col])=>[nm,avgF(rs,x=>x[key]),col])));});}
+   // una línea por régimen a lo largo del tiempo, como las de paro por sector y edad
+   const R=Object.keys(M).sort().map(t=>M[t]).filter(x=>x.total!=null);
+   vistaToggle('c_afi_reg',v=>{
+     const A=v==='anio'?anualDe(R):null;
+     setSub('afi-reg-mes',A?'Afiliados medios de cada año, por régimen':'Afiliados en cada régimen al final de cada periodo');
+     const col=k=>A?A.map(y=>avgF(y.rs,x=>x[k])):R.map(x=>x[k]??null);
+     return new Chart(c('c_afi_reg'),{type:'line',data:{labels:A?A.map(y=>y.lbl):R.map(x=>lblMes(x.t)),
+       datasets:AFI_REGS.map(([k,nm,cl])=>Object.assign(ds(nm,col(k),cl),A?{pointRadius:3}:{}))},
+       options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});}
   // autónomos
   const ca=afiClean(mb.autonomos);
   if(ca.length){conAnual('c_afi_auto',ca.map(x=>x.t),()=>({type:'line',data:{labels:ca.map(x=>lblMes(x.t)),datasets:[ds('Autónomos',ca.map(x=>x.v),COL.c4,true)]},
