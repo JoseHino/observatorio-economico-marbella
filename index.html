@@ -1418,16 +1418,15 @@ function extraLaboral(){
    '<div class="pdesc">Media anual del paro registrado en Marbella según la nacionalidad de la persona demandante. En <b>'+l.y+'</b>, <b>'+fmt(l.extranjera)+'</b> de los '+fmt(l.total)+' parados eran extranjeros (el '+fmt(pe,1)+' %).</div>'+
    '<div class="grid">'+
     card('c_paro_nac','Paro registrado por nacionalidad',geoTag('Marbella')+'Media de los doce meses, españoles y extranjeros (apilado)'+nota('Anual. IECA · SIMA; el año se cierra en el primer trimestre del siguiente.'),'stat',SRC_SIMA(37028),true)+
-    card('c_paro_orig','Paro extranjero por zona de origen',geoTag('Marbella')+'<span id="paroorig-sub">Media anual del último año, por nacionalidad agrupada</span>'+nota('Anual. IECA · SIMA.'),'stat',SRC_SIMA(37028))+
-    card('c_paro_pctext','Peso de los extranjeros en el paro',geoTag('Marbella')+'% de parados extranjeros sobre el total'+nota('Anual. Calculado con la media anual.'),'stat',SRC_SIMA(37028))+
+    card('c_paro_orig','Paro extranjero por zona de origen',geoTag('Marbella')+'Media anual de parados extranjeros de cada año, por nacionalidad agrupada'+nota('Anual. IECA · SIMA; el año se cierra en el primer trimestre del siguiente.'),'stat',SRC_SIMA(37028),true)+
+    card('c_paro_pctext','Peso de los extranjeros en el paro',geoTag('Marbella')+'% de parados extranjeros sobre el total'+nota('Anual. Calculado con la media anual.'),'stat',SRC_SIMA(37028),true)+
    '</div>');
   charts.paronac=new Chart(c('c_paro_nac'),stackNac(p.map(x=>x.y),p.map(x=>x.espanola),p.map(x=>x.extranjera),'Española','Extranjera'));
   const PG=p.filter(x=>x.grupos);
-  if(PG.length)yearPicker('c_paro_orig',PG.map(x=>x.y),y=>{
-    const g=(PG.find(x=>String(x.y)===y)||last(PG)).grupos,G=[['ue15','UE (15)'],['resto_ue','Resto UE'],['resto_europa','Resto de Europa'],['africa','África'],['america_latina','América Latina'],['resto_mundo','Resto del mundo'],['resto_america','Resto de América']]
-      .filter(([k])=>g[k]!=null).sort((a,b)=>g[b[0]]-g[a[0]]);
-    setSub('paroorig-sub','Paro extranjero medio de '+y+', por nacionalidad agrupada');
-    redraw('c_paro_orig',()=>barCatH('c_paro_orig',G.map(x=>x[1]),G.map(x=>g[x[0]]),G.map(()=>COL.c4),'parados'));});
+  // una línea por zona de origen a lo largo de los años (ordenadas por el último año)
+  if(PG.length){const g=last(PG).grupos,G=[['ue15','UE (15)'],['resto_ue','Resto UE'],['resto_europa','Resto de Europa'],['africa','África'],['america_latina','América Latina'],['resto_mundo','Resto del mundo'],['resto_america','Resto de América']]
+      .filter(([k])=>PG.some(x=>x.grupos[k]!=null)).sort((a,b)=>(g[b[0]]||0)-(g[a[0]]||0));
+    charts.paroorig=new Chart(c('c_paro_orig'),lineYear(PG.map(x=>x.y),G.map(([k,n],i)=>Object.assign(ds(n,PG.map(x=>x.grupos[k]??null),PAL[i%PAL.length]),{pointRadius:3}))));}
   charts.paropct=new Chart(c('c_paro_pctext'),lineYear(p.map(x=>x.y),[ds('% extranjeros',p.map(x=>x.total?+(x.extranjera/x.total*100).toFixed(1):null),COL.c4,true)],v=>v+'%'));
 }
 
