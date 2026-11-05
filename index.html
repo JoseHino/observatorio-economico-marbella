@@ -541,8 +541,8 @@ function buildLaboral(){
    '<div class="pdesc">Paro registrado municipal (mensual) y su media anual. El total y el sexo salen del Observatorio Argos del Servicio Andaluz de Empleo, que publica el dato el mismo día que se anuncia el paro; la edad y el sector, del SEPE, que los publica unos días después. Todos los datos referidos al municipio de Marbella.</div>'+
    '<div class="grid">'+
     card('c_paro','Paro registrado',geoTag('Marbella')+'<span id="paro-sub">Personas paradas registradas al cierre de cada mes, por sexo</span>'+nota('Mensual desde 2006; en vista anual, media de los meses de cada año (* = año incompleto). Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosParoSrc(),true)+
-    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'<span id="parosec-sub">Paro del último mes por sector de procedencia</span>'+nota('Mensual desde 2006 o media de un año. Elige el periodo con el selector.'),'live',sepeSrc())+
-    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'<span id="paroedad-sub">Estructura del último mes — útil para empleo juvenil y senior</span>'+nota('Mensual desde 2006 o media de un año. Elige el periodo con el selector.'),'live',sepeSrc())+
+    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'<span id="parosec-sub">Personas paradas registradas al cierre de cada mes, por sector de procedencia</span>'+nota('Mensual desde 2006; en vista anual, media de los meses de cada año (* = año incompleto). Desglose del SEPE: no lo publicó de mayo a diciembre de 2013.'),'live',sepeSrc(),true)+
+    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'<span id="paroedad-sub">Estructura del último mes — útil para empleo juvenil y senior</span>'+nota('Mensual desde 2006 o media de un año. Elige el periodo con el selector.'),'live',sepeSrc(),true)+
    '</div>'+anualHtml;
   const s=(DATA.paro_mensual||{}).serie||[];
   if(s.length){
@@ -555,14 +555,15 @@ function buildLaboral(){
         options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
     // edad y sector vienen del SEPE (el último mes puede llegar antes por Argos, sin desglose)
     const SK=[['Servicios','servicios',COL.c1],['Construcción','construccion',COL.c6],['Industria','industria',COL.c5],['Agricultura','agricultura',COL.c4],['Sin empleo ant.','sin_empleo',COL.mut]];
-    periodPicker('c_paro_sec',s.filter(x=>x.sectores),'Media anual',(rs,lbl,an)=>{
-      // barras: con servicios por encima del 80 % el donut no dejaba ver el resto
-      const v=SK.map(([n,k])=>avgF(rs,x=>x.sectores[k])),tot=v.reduce((a,b)=>a+(b||0),0);
-      setSub('parosec-sub',(an?'Paro medio de ':'Paro de ')+lbl+' por sector de procedencia · '+fmt(tot)+' personas');
-      redraw('c_paro_sec',()=>new Chart(c('c_paro_sec'),{type:'bar',data:{labels:SK.map(x=>x[0]),datasets:[{data:v,backgroundColor:SK.map(x=>x[2]),borderRadius:6,maxBarThickness:30}]},
-        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
-          tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' personas ('+fmt(tot?x.parsed.x/tot*100:0,1)+' %)'}}},
-          scales:{x:axY(),y:{grid:{display:false}}}}}));});
+    // serie completa por sector, como la del paro total; los meses sin desglose quedan como hueco
+    const PS=rellenaMeses(s.filter(x=>x.sectores));
+    vistaToggle('c_paro_sec',v=>{
+      const A=v==='anio'?anualDe(PS.filter(x=>x.sectores)):null;
+      setSub('parosec-sub',A?'Paro registrado medio de cada año, por sector de procedencia':'Personas paradas registradas al cierre de cada mes, por sector de procedencia');
+      const col=k=>A?A.map(y=>avgF(y.rs,x=>x.sectores[k])):PS.map(x=>x.sectores?x.sectores[k]:null);
+      return new Chart(c('c_paro_sec'),{type:'line',data:{labels:A?A.map(y=>y.lbl):PS.map(x=>lblMes(x.t)),
+        datasets:SK.map(([n,k,cl],i)=>Object.assign(ds(n,col(k),cl,i===0),A?{pointRadius:3}:{}))},
+        options:baseOpts({interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
     const EK=[['Menor de 25','menor25',COL.c4],['25 a 44','de25a44',COL.c1],['45 y más','mayor45',COL.c6]];
     periodPicker('c_paro_edad',s.filter(x=>x.edad),'Media anual',(rs,lbl,an)=>{
       setSub('paroedad-sub',(an?'Paro medio de ':'Paro de ')+lbl+' por tramo de edad');
