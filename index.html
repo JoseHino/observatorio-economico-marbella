@@ -631,7 +631,7 @@ function buildContr(){
     card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes'+nota('Mensual. Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosContrSrc(),true)+
     card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual'+nota('Mensual. Calculada como temporales ÷ total del mes.'),'live',argosContrSrc())+
     card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo'+nota('Mensual. Refleja el último mes disponible.'),'live',argosContrSrc())+
-    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'Distribución sectorial del último mes'+nota('Mensual. Refleja el último mes disponible.'),'live',argosContrSrc(),true)+
+    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'<span id="csec-sub">Distribución sectorial del último mes</span>'+nota('Mensual o total anual. Elige el mes o el año con el selector.'),'live',argosContrSrc(),true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
   const cur=last(s),tt=cur.total?cur.temporales/cur.total*100:0;
@@ -647,8 +647,51 @@ function buildContr(){
     {label:'Indefinidos',data:[cur.indef_h,cur.indef_m],backgroundColor:hexA(COL.c4,.85),stack:'s'},
     {label:'Temporales',data:[cur.temp_h,cur.temp_m],backgroundColor:hexA(COL.c6,.85),stack:'s'}]},
     options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
-  const se=cur.sectores||{};
-  barCatH('c_contr_sec',['Servicios','Construcción','Industria','Agricultura'],[se.servicios,se.construccion,se.industria,se.agricultura],[COL.c1,COL.c6,COL.c5,COL.c4],'contratos');
+  contrSecInit(s);
+}
+/* Contratos por sector: un mes cualquiera del histórico o el total de un año. */
+function contrSecInit(s){
+  const ss=s.filter(x=>x.sectores);if(!ss.length)return;
+  const wrap=c('c_contr_sec').parentNode;
+  wrap.insertAdjacentHTML('beforebegin','<div class="toolbar" style="gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
+    '<div class="seg" id="csec-modo" style="margin-bottom:0"><button data-m="mes" class="on">Mensual</button><button data-m="anio">Total anual</button></div>'+
+    '<select class="btn" id="csec-per"></select></div>');
+  const KEYS=['servicios','construccion','industria','agricultura'];
+  const anios=[...new Set(ss.map(x=>x.t.slice(0,4)))];
+  const st={modo:'mes',per:last(ss).t};
+  const fillSel=()=>{
+    const sel=c('csec-per');
+    if(st.modo==='mes'){
+      sel.innerHTML=ss.slice().reverse().map(x=>{const[a,m]=x.t.split('-');return '<option value="'+x.t+'">'+MESES[+m-1]+' '+a+'</option>';}).join('');
+    }else{
+      sel.innerHTML=anios.slice().reverse().map(a=>{const n=ss.filter(x=>x.t.startsWith(a)).length;
+        const ult=ss.filter(x=>x.t.startsWith(a)).pop().t.slice(5);
+        return '<option value="'+a+'">'+a+(n<12?' (ene–'+MESES[+ult-1]+')':'')+'</option>';}).join('');
+    }
+    sel.value=st.per;
+  };
+  const draw=()=>{
+    let v,sub;
+    if(st.modo==='mes'){
+      const r=ss.find(x=>x.t===st.per)||last(ss);const[a,m]=r.t.split('-');
+      v=KEYS.map(k=>r.sectores[k]);sub='Contratos de '+MESES[+m-1]+' '+a+' por sector';
+    }else{
+      const rs=ss.filter(x=>x.t.startsWith(st.per));
+      v=KEYS.map(k=>rs.reduce((a,x)=>a+(x.sectores[k]||0),0));
+      sub='Total de contratos de '+st.per+(rs.length<12?' (ene–'+MESES[+rs[rs.length-1].t.slice(5)-1]+', año en curso)':'')+' por sector';
+    }
+    const tot=v.reduce((a,b)=>a+(b||0),0);
+    c('csec-sub').textContent=sub+' · '+fmt(tot)+' en total';
+    if(charts.csec)charts.csec.destroy();
+    charts.csec=barCatH('c_contr_sec',['Servicios','Construcción','Industria','Agricultura'],v,[COL.c1,COL.c6,COL.c5,COL.c4],'contratos');
+  };
+  c('csec-modo').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    if(b.dataset.m===st.modo)return;st.modo=b.dataset.m;
+    c('csec-modo').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+    st.per=st.modo==='mes'?last(ss).t:(anios.filter(a=>ss.filter(x=>x.t.startsWith(a)).length===12).pop()||last(anios));
+    fillSel();draw();}));
+  c('csec-per').addEventListener('change',e=>{st.per=e.target.value;draw();});
+  fillSel();draw();
 }
 
 /* ================= COMPARATIVA ================= */
@@ -1198,7 +1241,7 @@ function dsRef(label,data,color){return Object.assign(ds(label,data,color),{bord
 function hexA(h,a){const n=parseInt(h.slice(1),16);return'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')';}
 function doughnut(id,segsRaw){const segs=segsRaw.filter(x=>x[1]!=null);new Chart(c(id),{type:'doughnut',data:{labels:segs.map(x=>x[0]),datasets:[{data:segs.map(x=>x[1]),backgroundColor:segs.map(x=>x[2]),borderColor:'#fff',borderWidth:3,hoverOffset:6}]},options:{cutout:'62%',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,padding:12,font:{size:12}}},tooltip:{callbacks:{label:x=>x.label+': '+fmt(x.parsed)}}}}});}
 function barCat(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:76}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.y)+' '+unit}}},scales:{x:{grid:{display:false}},y:axY()}}});}
-function barCatH(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
+function barCatH(id,labels,data,colors,unit){return new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
 
 
 /* ================= TERMÓMETRO DE CRISIS =================
