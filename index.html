@@ -658,7 +658,7 @@ function buildContr(){
     card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'<span id="contr-sub">Contratos iniciales y convertidos por tipo, cada mes</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto). Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosContrSrc(),true)+
     card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'<span id="temp-sub">% de contratos temporales sobre el total mensual</span>'+nota('Mensual o anual. Calculada como temporales ÷ total del periodo.'),'live',argosContrSrc(),true)+
     card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'<span id="csexo-sub">Contratos de cada mes por sexo y tipo (indefinidos en azul y turquesa; temporales en amarillo y granate, discontinuos)</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto).'),'live',argosContrSrc(),true)+
-    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'<span id="csec-sub">Distribución sectorial del último mes</span>'+nota('Mensual desde 2006 o total de un año. Elige el periodo con el selector.'),'live',argosContrSrc(),true)+
+    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'<span id="csec-sub">Contratos firmados cada mes, por sector de actividad</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto).'),'live',argosContrSrc(),true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
   const cur=last(s),tt=cur.total?cur.temporales/cur.total*100:0;
@@ -691,10 +691,15 @@ function buildContr(){
       datasets:CK.map(([n,k,cl,dash])=>Object.assign(ds(n,col(k),cl),dash?{borderDash:[6,4]}:{},A?{pointRadius:3}:{}))},
       options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
   const SC=[['Servicios','servicios',COL.c1],['Construcción','construccion',COL.c6],['Industria','industria',COL.c5],['Agricultura','agricultura',COL.c4]];
-  periodPicker('c_contr_sec',s.filter(x=>x.sectores),'Total anual',(rs,lbl,an)=>{
-    const v=SC.map(([n,k])=>sumF(rs,x=>x.sectores[k]));
-    setSub('csec-sub',(an?'Total de contratos de ':'Contratos de ')+lbl+' por sector · '+fmt(v.reduce((a,b)=>a+b,0))+' en total');
-    redraw('c_contr_sec',()=>barCatH('c_contr_sec',SC.map(x=>x[0]),v,SC.map(x=>x[2]),'contratos'));});
+  // una línea por sector a lo largo del tiempo, como el paro por sector
+  const CSE=s.filter(x=>x.sectores);
+  if(CSE.length)vistaToggle('c_contr_sec',v=>{
+    const A=v==='anio'?anualDe(CSE):null;
+    setSub('csec-sub',A?'Contratos firmados cada año, por sector de actividad':'Contratos firmados cada mes, por sector de actividad');
+    const col=k=>A?A.map(y=>sumF(y.rs,x=>x.sectores[k])):CSE.map(x=>x.sectores[k]);
+    return new Chart(c('c_contr_sec'),{type:'line',data:{labels:A?A.map(y=>y.lbl):CSE.map(x=>lblMes(x.t)),
+      datasets:SC.map(([n,k,cl],i)=>Object.assign(ds(n,col(k),cl,i===0),A?{pointRadius:3}:{}))},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
 }
 /* ================= COMPARATIVA ================= */
 // Rellena con {t} los meses que falten entre el primero y el último (huecos de la fuente).
