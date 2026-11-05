@@ -10,6 +10,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
 <style>
 :root{
   --bg:#f5f5f7; --surface:#fff; --tint:#fbfbfd;
@@ -1295,9 +1297,46 @@ function periodPicker(id,ss,anualTxt,draw){
   fill();run();
 }
 // render(vista) devuelve el Chart; vista = 'mes' | 'anio'.
+/* Zoom en las series: botones de rango (últimos N años) + arrastrar sobre la gráfica
+   para ampliar un tramo (pellizcar en el móvil; Mayús + arrastrar para desplazarse). */
+try{if(window.ChartZoom)Chart.register(window.ChartZoom);}catch(e){}
+// 'ene 06' → 2006.0 · '3T 24' → 2024.5 · '2025*' → 2025
+function lblTiempo(l){l=String(l);let m=l.match(/^(\d{4})/);if(m)return +m[1];
+  m=l.match(/^(\d)T (\d{2})$/);if(m)return 2000+(+m[2])+(m[1]-1)/4;
+  m=l.match(/^([a-z]{3}) (\d{2})$/);if(m){const y=+m[2];return (y>50?1900:2000)+y+MESES.indexOf(m[1])/12;}return null;}
+function aplicaRango(ch,r){
+  const L=ch.data.labels;
+  if(ch.resetZoom)ch.resetZoom('none');
+  if(r==='all'||!ch.zoomScale)return;
+  const T=L.map(lblTiempo),fin=T[T.length-1],ini=fin-(+r)+1e-6;const i=T.findIndex(t=>t!=null&&t>ini);
+  if(i>0)ch.zoomScale('x',{min:i,max:L.length-1},'none');
+}
 function vistaToggle(id,render){
-  ctlBar(id,segHtml(id+'-vista',[['mes','Mensual'],['anio','Anual']],'mes'));
-  const go=v=>redraw(id,()=>render(v));segBind(id+'-vista',go);go('mes');
+  const RG=[['all','Todo'],['10','10 años'],['5','5 años'],['2','2 años'],['1','12 meses']];
+  ctlBar(id,segHtml(id+'-vista',[['mes','Mensual'],['anio','Anual']],'mes')+
+    segHtml(id+'-rango',RG,'all')+
+    '<button class="btn" id="'+id+'-zr" style="font-size:12.5px;padding:4px 12px;display:none">Quitar zoom</button>'+
+    '<span style="font-size:12px;color:var(--mut)">Arrastra sobre la gráfica para ampliar</span>');
+  const st={v:'mes',r:'all',prog:false};
+  const rango=(ch,r)=>{st.prog=true;try{aplicaRango(ch,r);}finally{st.prog=false;}};
+  const marcaRango=r=>c(id+'-rango').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===r));
+  const go=()=>redraw(id,()=>{
+    const ch=render(st.v);
+    ch.options.plugins.zoom={limits:{x:{minRange:3}},
+      zoom:{drag:{enabled:true,backgroundColor:'rgba(0,113,227,.12)',borderColor:'rgba(0,113,227,.5)',borderWidth:1},
+            pinch:{enabled:true},mode:'x',onZoomComplete:()=>{if(st.prog)return;marcaRango('');c(id+'-zr').style.display='';}},
+      pan:{enabled:true,mode:'x',modifierKey:'shift',onPanComplete:()=>{if(st.prog)return;marcaRango('');c(id+'-zr').style.display='';}}};
+    ch.update('none');
+    // en anual no tiene sentido «12 meses»
+    c(id+'-rango').querySelector('[data-v="1"]').style.display=st.v==='anio'?'none':'';
+    if(st.v==='anio'&&st.r==='1')st.r='2';
+    rango(ch,st.r);marcaRango(st.r);c(id+'-zr').style.display='none';
+    return ch;});
+  segBind(id+'-vista',v=>{st.v=v;go();});
+  c(id+'-rango').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    st.r=b.dataset.v;marcaRango(st.r);c(id+'-zr').style.display='none';rango(charts['pp_'+id],st.r);}));
+  c(id+'-zr').addEventListener('click',()=>{st.r='all';marcaRango('all');c(id+'-zr').style.display='none';rango(charts['pp_'+id],'all');});
+  go();
 }
 // Serie anual [{a, lbl, rs}] a partir de una mensual (* = año incompleto).
 const anualDe=ss=>{const G=porAnio(ss);return Object.keys(G).sort().map(a=>({a,lbl:anioCompleto(G[a])?a:a+'*',rs:G[a]}));};
