@@ -1090,13 +1090,17 @@ def _argos_aplica(paro_mb, contr_mb, years):
           f"contratos: {len(a_contr)} meses (último {ult(a_contr)})")
     return paro_mb, contr_mb
 
+LAB_DESDE = None   # año inicial de la carga histórica (--historico → 2006)
+
 def sepe_laboral():
     """Descarga los CSV nacionales del SEPE (paro y contratos) y en una sola
     pasada extrae el detalle de Marbella y agrega España / Andalucía / Málaga
     para la comparativa territorial (misma metodología → totalmente comparable).
     El dato de Marbella se corrige después con Argos (ver _argos_aplica)."""
     year = datetime.date.today().year
-    years = (year, year-1, year-2)
+    # Cada pasada baja tres años y write_serie conserva el resto. El histórico entero
+    # (desde 2006) se carga UNA vez con `python fetch_data.py --solo laboral --historico`.
+    years = tuple(range(year, (LAB_DESDE or year - 2) - 1, -1))
 
     # ----- PARO -----
     step("Paro registrado mensual · SEPE (Marbella + comparativa territorial)")
@@ -2603,6 +2607,9 @@ def _funciones(argv):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if "--historico" in argv:
+        global LAB_DESDE
+        LAB_DESDE = 2006
     print("== Observatorio Económico Marbella · recolección de datos ==")
     errors = 0
     for fn in _funciones(argv):

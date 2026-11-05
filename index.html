@@ -451,7 +451,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis','renta_comparador','argos_historico'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis','renta_comparador'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -540,21 +540,28 @@ function buildLaboral(){
   el.innerHTML='<div class="h2">Mercado laboral · Paro registrado</div>'+
    '<div class="pdesc">Paro registrado municipal (mensual) y su media anual. El total y el sexo salen del Observatorio Argos del Servicio Andaluz de Empleo, que publica el dato el mismo día que se anuncia el paro; la edad y el sector, del SEPE, que los publica unos días después. Todos los datos referidos al municipio de Marbella.</div>'+
    '<div class="grid">'+
-    card('c_paro','Paro registrado mensual',geoTag('Marbella')+'Personas paradas registradas al cierre de cada mes, por sexo'+nota('Mensual. Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosParoSrc(),true)+
-    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'Distribución del último mes por sector de procedencia'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
-    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'Estructura del último mes — útil para empleo juvenil y senior'+nota('Mensual. Refleja el último mes disponible.'),'live',sepeSrc())+
+    card('c_paro','Paro registrado',geoTag('Marbella')+'<span id="paro-sub">Personas paradas registradas al cierre de cada mes, por sexo</span>'+nota('Mensual desde 2006; en vista anual, media de los meses de cada año (* = año incompleto). Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosParoSrc(),true)+
+    card('c_paro_sec','Paro por sector de actividad',geoTag('Marbella')+'<span id="parosec-sub">Distribución del último mes por sector de procedencia</span>'+nota('Mensual desde 2006 o media de un año. Elige el periodo con el selector.'),'live',sepeSrc())+
+    card('c_paro_edad','Paro por tramos de edad',geoTag('Marbella')+'<span id="paroedad-sub">Estructura del último mes — útil para empleo juvenil y senior</span>'+nota('Mensual desde 2006 o media de un año. Elige el periodo con el selector.'),'live',sepeSrc())+
    '</div>'+anualHtml;
   const s=(DATA.paro_mensual||{}).serie||[];
   if(s.length){
-    const L=s.map(x=>lblMes(x.t));
-    charts.paro=new Chart(c('c_paro'),{type:'line',data:{labels:L,datasets:[
-      ds('Total',s.map(x=>x.total),COL.c1,true),ds('Hombres',s.map(x=>x.hombres),COL.c4),ds('Mujeres',s.map(x=>x.mujeres),COL.c2)]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});
-    const dg=paroDesg(s)||{};               // el último mes puede venir de Argos sin desglose
-    const ls=dg.sectores||{};
-    doughnut('c_paro_sec',[['Servicios',ls.servicios,COL.c1],['Construcción',ls.construccion,COL.c6],['Industria',ls.industria,COL.c5],['Agricultura',ls.agricultura,COL.c4],['Sin empleo ant.',ls.sin_empleo,COL.mut]]);
-    const le=dg.edad||{};
-    barCat('c_paro_edad',['Menor de 25','25 a 44','45 y más'],[le.menor25,le.de25a44,le.mayor45],[COL.c4,COL.c1,COL.c6],'personas');
+    vistaToggle('c_paro',v=>{
+      const A=v==='anio'?anualDe(s):null;
+      setSub('paro-sub',A?'Paro registrado medio de cada año, por sexo':'Personas paradas registradas al cierre de cada mes, por sexo');
+      const col=f=>A?A.map(y=>avgF(y.rs,f)):s.map(f);
+      return new Chart(c('c_paro'),{type:'line',data:{labels:A?A.map(y=>y.lbl):s.map(x=>lblMes(x.t)),datasets:[
+        ds('Total',col(x=>x.total),COL.c1,true),ds('Hombres',col(x=>x.hombres),COL.c4),ds('Mujeres',col(x=>x.mujeres),COL.c2)]},
+        options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
+    // edad y sector vienen del SEPE (el último mes puede llegar antes por Argos, sin desglose)
+    const SK=[['Servicios','servicios',COL.c1],['Construcción','construccion',COL.c6],['Industria','industria',COL.c5],['Agricultura','agricultura',COL.c4],['Sin empleo ant.','sin_empleo',COL.mut]];
+    periodPicker('c_paro_sec',s.filter(x=>x.sectores),'Media anual',(rs,lbl,an)=>{
+      setSub('parosec-sub',(an?'Paro medio de ':'Paro de ')+lbl+' por sector de procedencia');
+      redraw('c_paro_sec',()=>doughnut('c_paro_sec',SK.map(([n,k,cl])=>[n,avgF(rs,x=>x.sectores[k]),cl])));});
+    const EK=[['Menor de 25','menor25',COL.c4],['25 a 44','de25a44',COL.c1],['45 y más','mayor45',COL.c6]];
+    periodPicker('c_paro_edad',s.filter(x=>x.edad),'Media anual',(rs,lbl,an)=>{
+      setSub('paroedad-sub',(an?'Paro medio de ':'Paro de ')+lbl+' por tramo de edad');
+      redraw('c_paro_edad',()=>barCat('c_paro_edad',EK.map(e=>e[0]),EK.map(([n,k])=>avgF(rs,x=>x.edad[k])),EK.map(e=>e[2]),'personas'));});
   }
 }
 
@@ -579,46 +586,48 @@ function buildAfiliacion(){
    '<div class="pdesc">Trabajadores afiliados en alta laboral que <b>residen en Marbella</b>, con desglose por régimen (General, Autónomos, Sistema Especial Agrario, Mar y Empleados del Hogar). Fuente: explotación del IECA de los registros de la Tesorería General de la Seguridad Social.</div>'+
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
-    card('c_afi_tot','Evolución de afiliados',geoTag('Marbella')+'Total de afiliados a la Seguridad Social, fin de cada periodo'+nota('Mensual desde jul-2021; trimestral antes (2012-2021). IECA · afiliación.'),'live',SRC_AFI,true)+
-    card('c_afi_reg','Composición por régimen',geoTag('Marbella')+'<span id="afi-reg-mes"></span> Reparto de los afiliados por régimen'+nota('Mensual. Refleja el último periodo disponible.'),'live',SRC_AFI)+
-    card('c_afi_auto','Autónomos (RETA)',geoTag('Marbella')+'Afiliados en el Régimen Especial de Trabajadores Autónomos'+nota('Mensual. IECA · afiliación.'),'live',SRC_AFI)+
-    card('c_afi_evo','Evolución por régimen',geoTag('Marbella')+'Composición de la afiliación por régimen a lo largo del tiempo (apilado)'+nota('Mensual desde jul-2021; trimestral antes. Los cinco regímenes suman el total de afiliados. El General incluye el Régimen Especial de la Minería del Carbón (residual).'),'live',SRC_AFI,true)+
+    card('c_afi_tot','Evolución de afiliados',geoTag('Marbella')+'Total de afiliados a la Seguridad Social, fin de cada periodo'+nota('Mensual desde jul-2021; trimestral antes (2012-2021). IECA · afiliación. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
+    card('c_afi_reg','Composición por régimen',geoTag('Marbella')+'<span id="afi-reg-mes">Reparto de los afiliados por régimen</span>'+nota('Mensual desde jul-2021 y trimestral antes (desde 2012), o media de un año. Elige el periodo con el selector.'),'live',SRC_AFI)+
+    card('c_afi_auto','Autónomos (RETA)',geoTag('Marbella')+'Afiliados en el Régimen Especial de Trabajadores Autónomos'+nota('Mensual. IECA · afiliación. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI)+
+    card('c_afi_evo','Evolución por régimen',geoTag('Marbella')+'Composición de la afiliación por régimen a lo largo del tiempo (apilado)'+nota('Mensual desde jul-2021; trimestral antes. Los cinco regímenes suman el total de afiliados. El General incluye el Régimen Especial de la Minería del Carbón (residual). En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
    '</div>'+
    '<div class="h2" style="margin-top:24px">Comparativa territorial</div>'+
    '<div class="pdesc">Marbella frente a la provincia de Málaga y al conjunto de Andalucía, con la misma fuente y metodología (afiliados por municipio/territorio de residencia).</div>'+
    '<div class="grid">'+
-    card('c_afi_idx','Evolución comparada · índice base 100',geoTag('Marbella · Málaga · Andalucía')+'Cada territorio normalizado a 100 en el primer periodo común'+nota('Mensual. Permite comparar la trayectoria del empleo afiliado.'),'live',SRC_AFI,true)+
-    card('c_afi_pctaut','Peso de los autónomos comparado',geoTag('Marbella · Málaga · Andalucía')+'% de afiliados en el régimen de autónomos sobre el total'+nota('Mensual. Misma metodología en los tres ámbitos.'),'live',SRC_AFI,true)+
+    card('c_afi_idx','Evolución comparada · índice base 100',geoTag('Marbella · Málaga · Andalucía')+'Cada territorio normalizado a 100 en el primer periodo común'+nota('Mensual. Permite comparar la trayectoria del empleo afiliado. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
+    card('c_afi_pctaut','Peso de los autónomos comparado',geoTag('Marbella · Málaga · Andalucía')+'% de afiliados en el régimen de autónomos sobre el total'+nota('Mensual. Misma metodología en los tres ámbitos. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_AFI,true)+
    '</div>';
   if(!mb.total){el.innerHTML+='<div class="note">No hay datos de afiliación disponibles todavía.</div>';return;}
   // evolución total
   const ct=afiClean(mb.total);
-  if(ct.length){charts.afitot=new Chart(c('c_afi_tot'),{type:'line',data:{labels:ct.map(x=>lblMes(x.t)),datasets:[ds('Afiliados',ct.map(x=>x.v),COL.c1,true)]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+  if(ct.length){conAnual('c_afi_tot',ct.map(x=>x.t),()=>({type:'line',data:{labels:ct.map(x=>lblMes(x.t)),datasets:[ds('Afiliados',ct.map(x=>x.v),COL.c1,true)]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})}),'avg');}
   // doughnut composición por régimen (último periodo)
-  const mes=tot?lblMes(tot.t):'';const lbl=document.getElementById('afi-reg-mes');if(lbl)lbl.textContent='('+mes+')';
-  doughnut('c_afi_reg',AFI_REGS.map(([key,nm,col])=>[nm,(afiLast(mb[key])||{}).v,col]));
+  {const M={};AFI_REGS.concat([['total']]).forEach(([key])=>afiClean(mb[key]).forEach(p=>{(M[p.t]=M[p.t]||{t:p.t})[key]=p.v;}));
+   periodPicker('c_afi_reg',Object.keys(M).sort().map(t=>M[t]).filter(x=>x.total!=null),'Media anual',(rs,lbl,an)=>{
+     setSub('afi-reg-mes',(an?'Afiliados medios de ':'Afiliados en ')+lbl+' por régimen');
+     redraw('c_afi_reg',()=>doughnut('c_afi_reg',AFI_REGS.map(([key,nm,col])=>[nm,avgF(rs,x=>x[key]),col])));});}
   // autónomos
   const ca=afiClean(mb.autonomos);
-  if(ca.length){charts.afiauto=new Chart(c('c_afi_auto'),{type:'line',data:{labels:ca.map(x=>lblMes(x.t)),datasets:[ds('Autónomos',ca.map(x=>x.v),COL.c4,true)]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+  if(ca.length){conAnual('c_afi_auto',ca.map(x=>x.t),()=>({type:'line',data:{labels:ca.map(x=>lblMes(x.t)),datasets:[ds('Autónomos',ca.map(x=>x.v),COL.c4,true)]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})}),'avg');}
   // evolución por régimen (área apilada) — usar el eje temporal del total
   const L=ct.map(x=>x.t);
   const byT=key=>{const m=Object.fromEntries(afiClean(mb[key]).map(p=>[p.t,p.v]));return L.map(t=>m[t]??null);};
-  charts.afievo=new Chart(c('c_afi_evo'),{type:'line',data:{labels:L.map(lblMes),datasets:AFI_REGS.map(([key,nm,col])=>({
+  conAnual('c_afi_evo',L,()=>({type:'line',data:{labels:L.map(lblMes),datasets:AFI_REGS.map(([key,nm,col])=>({
     label:nm,data:byT(key),borderColor:col,backgroundColor:hexA(col,.5),fill:true,borderWidth:1,pointRadius:0,tension:.2,stack:'a'}))},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:Object.assign({stacked:true},axY())}})});
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:Object.assign({stacked:true},axY())}})}),'avg');
   // comparativa territorial
   /* Marbella en azul y grueso; los ámbitos de referencia en colores distintos
      (antes Málaga compartía azul con Marbella y las líneas no se distinguían) */
   const T={marbella:['Marbella',COL.c1,3],malaga:['Málaga',COL.c5,1.6],andalucia:['Andalucía',COL.c6,1.6]};
   // periodos comunes (los del total de Marbella)
   const idxLine=(terr)=>{const m=Object.fromEntries(afiClean((A[terr]||{}).total).map(p=>[p.t,p.v]));const arr=L.map(t=>m[t]??null);return indexar(arr);};
-  charts.afiidx=new Chart(c('c_afi_idx'),{type:'line',data:{labels:L.map(lblMes),datasets:Object.keys(T).map(terr=>{const[nm,col,w]=T[terr];return{label:nm,data:idxLine(terr),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25};})},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});
+  conAnual('c_afi_idx',L,()=>({type:'line',data:{labels:L.map(lblMes),datasets:Object.keys(T).map(terr=>{const[nm,col,w]=T[terr];return{label:nm,data:idxLine(terr),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25};})},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})}),'avg');
   const pctAutLine=(terr)=>{const o=A[terr]||{};const mt=Object.fromEntries(afiClean(o.total).map(p=>[p.t,p.v]));const ma=Object.fromEntries(afiClean(o.autonomos).map(p=>[p.t,p.v]));return L.map(t=>(mt[t]&&ma[t]!=null)?+(ma[t]/mt[t]*100).toFixed(1):null);};
-  charts.afipct=new Chart(c('c_afi_pctaut'),{type:'line',data:{labels:L.map(lblMes),datasets:Object.keys(T).map(terr=>{const[nm,col,w]=T[terr];return{label:nm,data:pctAutLine(terr),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25};})},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})});
+  conAnual('c_afi_pctaut',L,()=>({type:'line',data:{labels:L.map(lblMes),datasets:Object.keys(T).map(terr=>{const[nm,col,w]=T[terr];return{label:nm,data:pctAutLine(terr),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25};})},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})}),'avg');
 }
 
 /* ================= CONTRATACIÓN ================= */
@@ -628,76 +637,45 @@ function buildContr(){
    '<div class="pdesc">Contratos registrados cada mes diferenciando indefinidos y temporales, por sexo y sector. La reforma laboral de 2022 disparó la contratación indefinida.</div>'+
    '<div id="contr-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'Contratos iniciales y convertidos por tipo, cada mes'+nota('Mensual. Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosContrSrc(),true)+
-    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'% de contratos temporales sobre el total mensual'+nota('Mensual. Calculada como temporales ÷ total del mes.'),'live',argosContrSrc())+
-    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'Indefinidos y temporales del último mes por sexo'+nota('Mensual. Refleja el último mes disponible.'),'live',argosContrSrc())+
-    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'<span id="csec-sub">Distribución sectorial del último mes</span>'+nota('Mensual o total anual. Elige el mes o el año con el selector.'),'live',argosContrSrc(),true)+
+    card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'<span id="contr-sub">Contratos iniciales y convertidos por tipo, cada mes</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto). Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosContrSrc(),true)+
+    card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'<span id="temp-sub">% de contratos temporales sobre el total mensual</span>'+nota('Mensual o anual. Calculada como temporales ÷ total del periodo.'),'live',argosContrSrc())+
+    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'<span id="csexo-sub">Indefinidos y temporales del último mes por sexo</span>'+nota('Mensual desde 2006 o total de un año. Elige el periodo con el selector.'),'live',argosContrSrc())+
+    card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'<span id="csec-sub">Distribución sectorial del último mes</span>'+nota('Mensual desde 2006 o total de un año. Elige el periodo con el selector.'),'live',argosContrSrc(),true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
   const cur=last(s),tt=cur.total?cur.temporales/cur.total*100:0;
   document.getElementById('contr-note').innerHTML='En <b>'+lblMes(cur.t)+'</b>: <b>'+fmt(cur.total)+'</b> contratos — <b>'+fmt(cur.indefinidos)+'</b> indefinidos ('+fmt(100-tt,1)+'%) y <b>'+fmt(cur.temporales)+'</b> temporales ('+fmt(tt,1)+'%). Servicios concentra <b>'+fmt(cur.sectores.servicios)+'</b>.';
-  const L=s.map(x=>lblMes(x.t));
-  charts.contr=new Chart(c('c_contr'),{type:'bar',data:{labels:L,datasets:[
-    {label:'Indefinidos',data:s.map(x=>x.indefinidos),backgroundColor:hexA(COL.c4,.85),stack:'c'},
-    {label:'Temporales',data:s.map(x=>x.temporales),backgroundColor:hexA(COL.c6,.85),stack:'c'}]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},axMes),y:Object.assign({stacked:true},axY())}})});
-  charts.temp=new Chart(c('c_temp'),{type:'line',data:{labels:L,datasets:[ds('% temporales',s.map(x=>x.total?+(x.temporales/x.total*100).toFixed(1):null),COL.c6,true)]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>v+'%')}})});
-  charts.csexo=new Chart(c('c_contr_sexo'),{type:'bar',data:{labels:['Hombres','Mujeres'],datasets:[
-    {label:'Indefinidos',data:[cur.indef_h,cur.indef_m],backgroundColor:hexA(COL.c4,.85),stack:'s'},
-    {label:'Temporales',data:[cur.temp_h,cur.temp_m],backgroundColor:hexA(COL.c6,.85),stack:'s'}]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})});
-  contrSecInit(s);
+  vistaToggle('c_contr',v=>{
+    const A=v==='anio'?anualDe(s):null;
+    setSub('contr-sub',A?'Contratos firmados cada año por tipo':'Contratos iniciales y convertidos por tipo, cada mes');
+    const col=f=>A?A.map(y=>sumF(y.rs,f)):s.map(f);
+    return new Chart(c('c_contr'),{type:'bar',data:{labels:A?A.map(y=>y.lbl):s.map(x=>lblMes(x.t)),datasets:[
+      {label:'Indefinidos',data:col(x=>x.indefinidos),backgroundColor:hexA(COL.c4,.85),stack:'c'},
+      {label:'Temporales',data:col(x=>x.temporales),backgroundColor:hexA(COL.c6,.85),stack:'c'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},A?axAnio:axMes),y:Object.assign({stacked:true},axY())}})});});
+  vistaToggle('c_temp',v=>{
+    const A=v==='anio'?anualDe(s):null;
+    setSub('temp-sub',A?'% de contratos temporales sobre el total de cada año':'% de contratos temporales sobre el total mensual');
+    const tasa=rs=>{const t=sumF(rs,x=>x.total);return t?+(sumF(rs,x=>x.temporales)/t*100).toFixed(1):null;};
+    return new Chart(c('c_temp'),{type:'line',data:{labels:A?A.map(y=>y.lbl):s.map(x=>lblMes(x.t)),
+      datasets:[Object.assign(ds('% temporales',A?A.map(y=>tasa(y.rs)):s.map(x=>tasa([x])),COL.c6,true),A?{pointRadius:3}:{})]},
+      options:baseOpts({plugins:{legend:{display:false}},scales:{x:A?axAnio:axMes,y:axY(v=>v+'%')}})});});
+  periodPicker('c_contr_sexo',s.filter(x=>x.indef_h!=null),'Total anual',(rs,lbl,an)=>{
+    setSub('csexo-sub','Contratos de '+lbl+' por sexo y tipo');
+    redraw('c_contr_sexo',()=>new Chart(c('c_contr_sexo'),{type:'bar',data:{labels:['Hombres','Mujeres'],datasets:[
+      {label:'Indefinidos',data:[sumF(rs,x=>x.indef_h),sumF(rs,x=>x.indef_m)],backgroundColor:hexA(COL.c4,.85),stack:'s'},
+      {label:'Temporales',data:[sumF(rs,x=>x.temp_h),sumF(rs,x=>x.temp_m)],backgroundColor:hexA(COL.c6,.85),stack:'s'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true,grid:{display:false}},y:Object.assign({stacked:true},axY())}})}));});
+  const SC=[['Servicios','servicios',COL.c1],['Construcción','construccion',COL.c6],['Industria','industria',COL.c5],['Agricultura','agricultura',COL.c4]];
+  periodPicker('c_contr_sec',s.filter(x=>x.sectores),'Total anual',(rs,lbl,an)=>{
+    const v=SC.map(([n,k])=>sumF(rs,x=>x.sectores[k]));
+    setSub('csec-sub',(an?'Total de contratos de ':'Contratos de ')+lbl+' por sector · '+fmt(v.reduce((a,b)=>a+b,0))+' en total');
+    redraw('c_contr_sec',()=>barCatH('c_contr_sec',SC.map(x=>x[0]),v,SC.map(x=>x[2]),'contratos'));});
 }
-/* Contratos por sector: un mes cualquiera del histórico o el total de un año. */
-function contrSecInit(s){
-  // Serie larga de Argos (desde 2009) + la mensual del panel, que manda si coinciden.
-  const m={};((DATA.argos_historico||{}).contratos||[]).forEach(x=>{if(x.sectores)m[x.t]=x;});
-  s.forEach(x=>{if(x.sectores)m[x.t]=x;});
-  const ss=Object.keys(m).sort().map(t=>m[t]);if(!ss.length)return;
-  const wrap=c('c_contr_sec').parentNode;
-  wrap.insertAdjacentHTML('beforebegin','<div class="toolbar" style="gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
-    '<div class="seg" id="csec-modo" style="margin-bottom:0"><button data-m="mes" class="on">Mensual</button><button data-m="anio">Total anual</button></div>'+
-    '<select class="btn" id="csec-per"></select></div>');
-  const KEYS=['servicios','construccion','industria','agricultura'];
-  const anios=[...new Set(ss.map(x=>x.t.slice(0,4)))];
-  const st={modo:'mes',per:last(ss).t};
-  const fillSel=()=>{
-    const sel=c('csec-per');
-    if(st.modo==='mes'){
-      sel.innerHTML=ss.slice().reverse().map(x=>{const[a,m]=x.t.split('-');return '<option value="'+x.t+'">'+MESES[+m-1]+' '+a+'</option>';}).join('');
-    }else{
-      sel.innerHTML=anios.slice().reverse().map(a=>{const n=ss.filter(x=>x.t.startsWith(a)).length;
-        const ult=ss.filter(x=>x.t.startsWith(a)).pop().t.slice(5);
-        return '<option value="'+a+'">'+a+(n<12?' (ene–'+MESES[+ult-1]+')':'')+'</option>';}).join('');
-    }
-    sel.value=st.per;
-  };
-  const draw=()=>{
-    let v,sub;
-    if(st.modo==='mes'){
-      const r=ss.find(x=>x.t===st.per)||last(ss);const[a,m]=r.t.split('-');
-      v=KEYS.map(k=>r.sectores[k]);sub='Contratos de '+MESES[+m-1]+' '+a+' por sector';
-    }else{
-      const rs=ss.filter(x=>x.t.startsWith(st.per));
-      v=KEYS.map(k=>rs.reduce((a,x)=>a+(x.sectores[k]||0),0));
-      sub='Total de contratos de '+st.per+(rs.length<12?' (ene–'+MESES[+rs[rs.length-1].t.slice(5)-1]+', año en curso)':'')+' por sector';
-    }
-    const tot=v.reduce((a,b)=>a+(b||0),0);
-    c('csec-sub').textContent=sub+' · '+fmt(tot)+' en total';
-    if(charts.csec)charts.csec.destroy();
-    charts.csec=barCatH('c_contr_sec',['Servicios','Construcción','Industria','Agricultura'],v,[COL.c1,COL.c6,COL.c5,COL.c4],'contratos');
-  };
-  c('csec-modo').querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
-    if(b.dataset.m===st.modo)return;st.modo=b.dataset.m;
-    c('csec-modo').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
-    st.per=st.modo==='mes'?last(ss).t:(anios.filter(a=>ss.filter(x=>x.t.startsWith(a)).length===12).pop()||last(anios));
-    fillSel();draw();}));
-  c('csec-per').addEventListener('change',e=>{st.per=e.target.value;draw();});
-  fillSel();draw();
-}
-
 /* ================= COMPARATIVA ================= */
+// Rellena con {t} los meses que falten entre el primero y el último (huecos de la fuente).
+function rellenaMeses(a){if(!a.length)return a;const m=Object.fromEntries(a.map(x=>[x.t,x]));const out=[];
+  for(let t=a[0].t;t<=last(a).t;){out.push(m[t]||{t});let[y,mm]=t.split('-').map(Number);mm++;if(mm>12){mm=1;y++;}t=y+'-'+String(mm).padStart(2,'0');}return out;}
 function indexar(a){const b=a.find(v=>v!=null);return b?a.map(v=>v==null?null:+(v/b*100).toFixed(1)):a;}
 function buildComparativa(){
   const el=document.getElementById('comparativa');
@@ -705,25 +683,25 @@ function buildComparativa(){
    '<div class="pdesc">Marbella frente a Málaga, Andalucía y España. Agregados calculados desde el mismo fichero del SEPE, por lo que son plenamente comparables.</div>'+
    '<div id="comp-note" class="note"></div>'+
    '<div class="grid">'+
-    card('c_comp_paro','Evolución del paro · índice base 100',geoTag('Marbella · Málaga · Andalucía · España')+'Cada territorio normalizado a 100 en el primer mes: compara la trayectoria'+nota('Mensual. Agregados calculados desde el mismo fichero del SEPE.'),'live',sepeSrc(),true)+
-    card('c_comp_temp','Tasa de temporalidad comparada',geoTag('Marbella · Málaga · Andalucía · España')+'% de contratos temporales sobre el total, mes a mes'+nota('Mensual. Misma metodología en los cuatro ámbitos.'),'live',sepeSrc(),true)+
+    card('c_comp_paro','Evolución del paro · índice base 100',geoTag('Marbella · Málaga · Andalucía · España')+'Cada territorio normalizado a 100 en el primer mes: compara la trayectoria'+nota('Mensual. Agregados calculados desde el mismo fichero del SEPE. En vista anual, media de cada año (* = año incompleto).'),'live',sepeSrc(),true)+
+    card('c_comp_temp','Tasa de temporalidad comparada',geoTag('Marbella · Málaga · Andalucía · España')+'% de contratos temporales sobre el total, mes a mes'+nota('Mensual. Misma metodología en los cuatro ámbitos. En vista anual, media de las tasas mensuales (* = año incompleto).'),'live',sepeSrc(),true)+
    '</div>';
   const s=(DATA.comparativa_laboral||{}).serie||[];
-  const sp=s.filter(r=>r.paro);
+  const sp=rellenaMeses(s.filter(r=>r.paro));
   if(sp.length){
     const L=sp.map(x=>lblMes(x.t));
-    const mk=(key,col,w)=>({label:{marbella:'Marbella',malaga:'Málaga',andalucia:'Andalucía',espana:'España'}[key],data:indexar(sp.map(x=>x.paro[key])),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25});
-    charts.cpar=new Chart(c('c_comp_paro'),{type:'line',data:{labels:L,datasets:[mk('marbella',COL.c1,3),mk('malaga',COL.c5,1.6),mk('andalucia',COL.c6,1.6),mk('espana','#5b5b60',1.6)]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});
+    const mk=(key,col,w)=>({label:{marbella:'Marbella',malaga:'Málaga',andalucia:'Andalucía',espana:'España'}[key],data:indexar(sp.map(x=>(x.paro||{})[key]??null)),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25});
+    conAnual('c_comp_paro',sp.map(x=>x.t),()=>({type:'line',data:{labels:L,datasets:[mk('marbella',COL.c1,3),mk('malaga',COL.c5,1.6),mk('andalucia',COL.c6,1.6),mk('espana','#5b5b60',1.6)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})}),'avg');
     const cur=last(sp);
     document.getElementById('comp-note').innerHTML='En <b>'+lblMes(cur.t)+'</b>, Marbella tuvo <b>'+fmt(cur.paro.marbella)+'</b> parados: el '+fmt(cur.paro.marbella/cur.paro.malaga*100,1)+'% de la provincia de Málaga y el '+fmt(cur.paro.marbella/cur.paro.espana*100,2)+'% de España.';
   }
-  const st=s.filter(r=>r.temporalidad&&r.temporalidad.marbella!=null);
+  const st=rellenaMeses(s.filter(r=>r.temporalidad&&r.temporalidad.marbella!=null));
   if(st.length){
     const L=st.map(x=>lblMes(x.t));
-    const mk=(key,col,w)=>({label:{marbella:'Marbella',malaga:'Málaga',andalucia:'Andalucía',espana:'España'}[key],data:st.map(x=>x.temporalidad[key]),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25});
-    charts.ctemp=new Chart(c('c_comp_temp'),{type:'line',data:{labels:L,datasets:[mk('marbella',COL.c1,3),mk('malaga',COL.c5,1.6),mk('andalucia',COL.c6,1.6),mk('espana','#5b5b60',1.6)]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})});
+    const mk=(key,col,w)=>({label:{marbella:'Marbella',malaga:'Málaga',andalucia:'Andalucía',espana:'España'}[key],data:st.map(x=>(x.temporalidad||{})[key]??null),borderColor:col,backgroundColor:'transparent',borderWidth:w,pointRadius:0,tension:.25});
+    conAnual('c_comp_temp',st.map(x=>x.t),()=>({type:'line',data:{labels:L,datasets:[mk('marbella',COL.c1,3),mk('malaga',COL.c5,1.6),mk('andalucia',COL.c6,1.6),mk('espana','#5b5b60',1.6)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})}),'avg');
   }
 }
 
@@ -733,37 +711,41 @@ function buildTurismo(){
   el.innerHTML='<div class="h2">Turismo · motor económico</div>'+
    '<div class="pdesc">Demanda y rentabilidad de hoteles, apartamentos y viviendas de uso turístico, en vivo desde el INE (Marbella es punto turístico con dato propio).</div>'+
    '<div class="grid">'+
-    card('c_tur','Viajeros y pernoctaciones hoteleras',geoTag('Marbella')+'Establecimientos hoteleros de Marbella, serie mensual'+nota('Mensual. INE · EOH, ~1 mes de desfase. Marbella es punto turístico con dato propio.'),'live',ineSerie('EOT42428','EOH viajeros'),true)+
-    card('c_adr','Rentabilidad · ADR y RevPAR',geoTag('Marbella')+'Tarifa media diaria e ingreso por habitación disponible (€)'+nota('Mensual. INE · EOH.'),'live',ineSerie('EOT43542','EOH ADR'),true)+
-    card('c_ocup','Ocupación y estancia media',geoTag('Marbella')+'Ocupación por plazas (%) y estancia media (días) en hoteles'+nota('Mensual, últimos 10 años. INE · EOH.'),'live',ineSerie('EOT3152','EOH ocupación'))+
-    card('c_alt','Apartamentos y VUT',geoTag('Marbella')+'Viajeros en apartamentos (EOAP) y viviendas de uso turístico'+nota('Mensual. EOAP mensual; las VUT son estadística experimental del INE (puede revisarse o pausarse).'),'live',ineSerie('EOT41395','EOAP / VUT'))+
-    card('c_turcomp','Marbella vs. Málaga capital',geoTag('Marbella vs. Málaga capital')+'Pernoctaciones hoteleras comparadas'+nota('Mensual. INE · EOH.'),'live',ineSerie('EOT42535','EOH Málaga'),true)+
+    card('c_tur','Viajeros y pernoctaciones hoteleras',geoTag('Marbella')+'Establecimientos hoteleros de Marbella, serie mensual'+nota('Mensual. INE · EOH, ~1 mes de desfase. Marbella es punto turístico con dato propio. En vista anual, total de cada año (* = año incompleto).'),'live',ineSerie('EOT42428','EOH viajeros'),true)+
+    card('c_adr','Rentabilidad · ADR y RevPAR',geoTag('Marbella')+'Tarifa media diaria e ingreso por habitación disponible (€)'+nota('Mensual. INE · EOH. En vista anual, media de cada año (* = año incompleto).'),'live',ineSerie('EOT43542','EOH ADR'),true)+
+    card('c_ocup','Ocupación y estancia media',geoTag('Marbella')+'<span id="ocup-sub">Ocupación por plazas (%) y estancia media (días) en hoteles</span>'+nota('Mensual, serie completa; en vista anual, media de los meses de cada año (* = año incompleto). INE · EOH.'),'live',ineSerie('EOT3152','EOH ocupación'))+
+    card('c_alt','Apartamentos y VUT',geoTag('Marbella')+'Viajeros en apartamentos (EOAP) y viviendas de uso turístico'+nota('Mensual. EOAP mensual; las VUT son estadística experimental del INE (puede revisarse o pausarse). En vista anual, viajeros totales y media de viviendas (* = año incompleto).'),'live',ineSerie('EOT41395','EOAP / VUT'))+
+    card('c_turcomp','Marbella vs. Málaga capital',geoTag('Marbella vs. Málaga capital')+'Pernoctaciones hoteleras comparadas'+nota('Mensual. INE · EOH. En vista anual, total de cada año (* = año incompleto).'),'live',ineSerie('EOT42535','EOH Málaga'),true)+
    '</div>';
   const t=(DATA.turismo&&DATA.turismo.hoteles)||{};
   const via=t.viajeros||[],per=t.pernoctaciones||[];
-  if(via.length){charts.tur=new Chart(c('c_tur'),{type:'line',data:{labels:via.map(x=>lblMes(x.t)),datasets:[
+  if(via.length){conAnual('c_tur',via.map(x=>x.t),()=>({type:'line',data:{labels:via.map(x=>lblMes(x.t)),datasets:[
     Object.assign(ds('Viajeros',via.map(x=>x.v),COL.c1,true),{yAxisID:'y'}),
     Object.assign(ds('Pernoctaciones',per.map(x=>x.v),COL.c4),{yAxisID:'y1'})]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>abbr(v)}}}})});}
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>abbr(v)}}}})}),'sum');}
   const adr=t.adr||[],rev=t.revpar||[];
-  if(adr.length){charts.adr=new Chart(c('c_adr'),{type:'line',data:{labels:adr.map(x=>lblMes(x.t)),datasets:[ds('ADR (€)',adr.map(x=>x.v),COL.c3,true),ds('RevPAR (€)',rev.map(x=>x.v),COL.c5)]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+' €')}})});}
-  /* 20 años de datos mensuales en media tarjeta son ilegibles: últimos 10 años */
-  const oc=tail(t.ocup_plazas,120),esMap=Object.fromEntries((t.estancia_media||[]).map(x=>[x.t,x.v]));
-  if(oc.length){charts.ocup=new Chart(c('c_ocup'),{type:'line',data:{labels:oc.map(x=>lblMes(x.t)),datasets:[
-    Object.assign(ds('Ocupación plazas (%)',oc.map(x=>x.v),COL.c1,true),{yAxisID:'y'}),
-    Object.assign(ds('Estancia media (días)',oc.map(x=>esMap[x.t]??null),COL.c4),{yAxisID:'y1'})]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%'),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>fmt(v,1)}}}})});}
+  if(adr.length){conAnual('c_adr',adr.map(x=>x.t),()=>({type:'line',data:{labels:adr.map(x=>lblMes(x.t)),datasets:[ds('ADR (€)',adr.map(x=>x.v),COL.c3,true),ds('RevPAR (€)',rev.map(x=>x.v),COL.c5)]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+' €')}})}),'avg');}
+  // serie completa; el botón Anual la resume en medias por año para que se lea bien
+  const esMap=Object.fromEntries((t.estancia_media||[]).map(x=>[x.t,x.v]));
+  const oc=(t.ocup_plazas||[]).map(x=>({t:x.t,o:x.v,e:esMap[x.t]??null}));
+  if(oc.length)vistaToggle('c_ocup',v=>{const A=v==='anio'?anualDe(oc):null;
+    setSub('ocup-sub',A?'Ocupación por plazas (%) y estancia media (días), media de cada año':'Ocupación por plazas (%) y estancia media (días) en hoteles');
+    const col=f=>A?A.map(y=>{const w=y.rs.map(f).filter(z=>z!=null);return w.length?+(w.reduce((a,b)=>a+b,0)/w.length).toFixed(2):null;}):oc.map(f);
+    return new Chart(c('c_ocup'),{type:'line',data:{labels:A?A.map(y=>y.lbl):oc.map(x=>lblMes(x.t)),datasets:[
+    Object.assign(ds('Ocupación plazas (%)',col(x=>x.o),COL.c1,true),{yAxisID:'y'}),
+    Object.assign(ds('Estancia media (días)',col(x=>x.e),COL.c4),{yAxisID:'y1'})]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY(v=>v+'%'),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>fmt(v,1)}}}})});});
   const ap=(DATA.turismo&&DATA.turismo.apartamentos)||{},vu=(DATA.turismo&&DATA.turismo.vut)||{};
   const apv=ap.viajeros||[],vv=vu.viviendas||[];
-  if(apv.length||vv.length){charts.alt=new Chart(c('c_alt'),{type:'line',data:{labels:(apv.length?apv:vv).map(x=>lblMes(x.t)),datasets:[
+  if(apv.length||vv.length){conAnual('c_alt',(apv.length?apv:vv).map(x=>x.t),()=>({type:'line',data:{labels:(apv.length?apv:vv).map(x=>lblMes(x.t)),datasets:[
     apv.length?Object.assign(ds('Viajeros apartamentos',apv.map(x=>x.v),COL.c4,true),{yAxisID:'y'}):null,
-    vv.length?Object.assign(ds('Viviendas turísticas (VUT)',vv.map(x=>x.v),COL.c5),{yAxisID:'y1'}):null].filter(Boolean)},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>abbr(v)}}}})});}
+    vv.length?Object.assign(ds('Viviendas turísticas (VUT)',(apv.length?apv:vv).map(x=>byT(vv)[x.t]??null),COL.c5),{yAxisID:'y1',spanGaps:true,pointRadius:2}):null].filter(Boolean)},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(),y1:{position:'right',grid:{display:false},ticks:{maxTicksLimit:6,callback:v=>abbr(v)}}}})}),[apv.length?'sum':'avg','avg']);}
   const mlg=(DATA.turismo&&DATA.turismo.malaga&&DATA.turismo.malaga.pernoctaciones)||[];
   if(per.length&&mlg.length){const mp=Object.fromEntries(mlg.map(x=>[x.t,x.v]));
-    charts.turcomp=new Chart(c('c_turcomp'),{type:'line',data:{labels:per.map(x=>lblMes(x.t)),datasets:[ds('Marbella',per.map(x=>x.v),COL.accent,true),ds('Málaga capital',per.map(x=>mp[x.t]??null),COL.c6)]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});}
+    conAnual('c_turcomp',per.map(x=>x.t),()=>({type:'line',data:{labels:per.map(x=>lblMes(x.t)),datasets:[ds('Marbella',per.map(x=>x.v),COL.accent,true),ds('Málaga capital',per.map(x=>mp[x.t]??null),COL.c6)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})}),'sum');}
 }
 
 /* ================= EMPRESAS ================= */
@@ -799,8 +781,8 @@ function buildEmpresas(){
    '<div class="h2" style="margin-top:24px">Dinamismo empresarial · Sociedades mercantiles</div>'+
    '<div class="pdesc">Creación y disolución de sociedades mercantiles. La estadística del INE llega a nivel <b>provincial (Málaga)</b>; no se publica por municipio.</div>'+
    '<div class="grid">'+
-    card('c_soc','Sociedades creadas vs. disueltas',geoTag('Provincia de Málaga')+'Sociedades mercantiles constituidas y disueltas cada mes'+nota('Mensual, últimos 12 años. INE · Estadística de Sociedades Mercantiles.'),'live',ineSerie('SM25051','Sociedades Mercantiles'),true)+
-    card('c_soc_saldo','Saldo neto de sociedades',geoTag('Provincia de Málaga')+'Creadas menos disueltas: dinamismo neto del tejido societario'+nota('Mensual. INE · Sociedades Mercantiles.'),'live',ineSerie('SM25051','Sociedades Mercantiles'),true)+
+    card('c_soc','Sociedades creadas vs. disueltas',geoTag('Provincia de Málaga')+'<span id="soc-sub">Sociedades mercantiles constituidas y disueltas cada mes</span>'+nota('Mensual, serie completa; en vista anual, total de cada año (* = año incompleto). INE · Estadística de Sociedades Mercantiles.'),'live',ineSerie('SM25051','Sociedades Mercantiles'),true)+
+    card('c_soc_saldo','Saldo neto de sociedades',geoTag('Provincia de Málaga')+'<span id="socsal-sub">Creadas menos disueltas: dinamismo neto del tejido societario</span>'+nota('Mensual, serie completa, o total de cada año. INE · Sociedades Mercantiles.'),'live',ineSerie('SM25051','Sociedades Mercantiles'),true)+
    '</div>';
   const e=(DATA.empresas||{}).total||[];
   if(e.length){charts.emp=new Chart(c('c_emp'),{type:'line',data:{labels:e.map(x=>x.y),datasets:[ds('Empresas',e.map(x=>x.v),COL.c5,true)]},
@@ -819,14 +801,20 @@ function buildEmpresas(){
   const sel=document.getElementById('emp-year');
   if(sel){sel.addEventListener('change',()=>drawSec(+sel.value));if(anios.length)drawSec(anios[anios.length-1]);}
   const so=DATA.sociedades||{};
-  /* la serie del INE arranca en 2007; se muestran los últimos 12 años */
-  const cre=tail(so.constituidas,144),disMap=Object.fromEntries((so.disueltas||[]).map(x=>[x.t,x.v])),sal=tail(so.saldo_neto,144);
-  const dis=cre.map(x=>({t:x.t,v:disMap[x.t]??null}));
-  if(cre.length){charts.soc=new Chart(c('c_soc'),{type:'line',data:{labels:cre.map(x=>lblMes(x.t)),datasets:[
-    ds('Creadas',cre.map(x=>x.v),COL.c4,true),ds('Disueltas',dis.map(x=>x.v),COL.c2)]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});}
-  if(sal.length){charts.socsaldo=new Chart(c('c_soc_saldo'),{type:'bar',data:{labels:sal.map(x=>lblMes(x.t)),datasets:[{label:'Saldo neto',data:sal.map(x=>x.v),backgroundColor:sal.map(x=>x.v>=0?hexA(COL.c4,.85):hexA(COL.c2,.85))}]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+  // la serie del INE arranca en 2007: completa, con vista anual (totales) para leerla de un vistazo
+  const disMap=Object.fromEntries((so.disueltas||[]).map(x=>[x.t,x.v]));
+  const cre=(so.constituidas||[]).map(x=>({t:x.t,c:x.v,d:disMap[x.t]??null})),sal=so.saldo_neto||[];
+  if(cre.length)vistaToggle('c_soc',v=>{const A=v==='anio'?anualDe(cre):null;
+    setSub('soc-sub',A?'Sociedades mercantiles constituidas y disueltas cada año':'Sociedades mercantiles constituidas y disueltas cada mes');
+    const col=f=>A?A.map(y=>sumF(y.rs,f)):cre.map(f);
+    return new Chart(c('c_soc'),{type:'line',data:{labels:A?A.map(y=>y.lbl):cre.map(x=>lblMes(x.t)),datasets:[
+    Object.assign(ds('Creadas',col(x=>x.c),COL.c4,true),A?{pointRadius:3}:{}),Object.assign(ds('Disueltas',col(x=>x.d),COL.c2),A?{pointRadius:3}:{})]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
+  if(sal.length)vistaToggle('c_soc_saldo',v=>{const A=v==='anio'?anualDe(sal):null;
+    setSub('socsal-sub',A?'Creadas menos disueltas, total de cada año':'Creadas menos disueltas: dinamismo neto del tejido societario');
+    const d=A?A.map(y=>sumF(y.rs,x=>x.v)):sal.map(x=>x.v);
+    return new Chart(c('c_soc_saldo'),{type:'bar',data:{labels:A?A.map(y=>y.lbl):sal.map(x=>lblMes(x.t)),datasets:[{label:'Saldo neto',data:d,backgroundColor:d.map(x=>x>=0?hexA(COL.c4,.85):hexA(COL.c2,.85))}]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:A?axAnio:axMes,y:axY()}})});});
 }
 
 /* ================= PRECIOS Y CONSUMO ================= */
@@ -849,35 +837,35 @@ function buildCoyuntura(){
    '<div class="pdesc">Lo que cuesta vivir y lo que se gasta. El IPC no se publica por municipios, así que se muestra <b>Andalucía</b> junto al dato nacional; el pulso del consumo se sigue con el índice de comercio minorista a precios constantes, que descuenta el efecto de los precios.</div>'+
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
-    card('c_ipc_var','Inflación · variación anual del IPC',geoTag('Andalucía vs. España')+'Cuánto suben los precios respecto al mismo mes del año anterior'+nota('Mensual. INE · IPC (base 2021). No existe IPC municipal; el dato autonómico es la máxima desagregación. El último dato nacional puede ser el avance, que el INE publica a fin de mes y confirma a mediados del siguiente; el desglose por comunidades llega con ese dato definitivo.'),'live',SRC_IPC(),true)+
-    card('c_ipc_idx','Nivel de precios · índice general',geoTag('Andalucía vs. España')+'Índice del IPC, base 2021 = 100'+nota('Mensual. INE · IPC. El INE rebasa el índice cada pocos años.'),'live',SRC_IPC())+
-    card('c_icm_var','Comercio minorista · variación anual',geoTag('Andalucía')+'Ventas del comercio al por menor, a precios constantes'+nota('Mensual. INE · Índice de Comercio al por Menor. Precios constantes: descuenta la inflación.'),'live',SRC_ICM())+
-    card('c_icm_idx','Índice de comercio minorista',geoTag('Andalucía')+'Cifra de negocio a precios constantes, base 2021 = 100'+nota('Mensual. INE · ICM, serie sin desestacionalizar: diciembre marca siempre el máximo del año y enero el mínimo. Para leer la tendencia, mejor la variación anual.'),'live',SRC_ICM(),true)+
+    card('c_ipc_var','Inflación · variación anual del IPC',geoTag('Andalucía vs. España')+'Cuánto suben los precios respecto al mismo mes del año anterior'+nota('Mensual. INE · IPC (base 2021). No existe IPC municipal; el dato autonómico es la máxima desagregación. El último dato nacional puede ser el avance, que el INE publica a fin de mes y confirma a mediados del siguiente; el desglose por comunidades llega con ese dato definitivo. En vista anual, media de las tasas mensuales (* = año incompleto).'),'live',SRC_IPC(),true)+
+    card('c_ipc_idx','Nivel de precios · índice general',geoTag('Andalucía vs. España')+'Índice del IPC, base 2021 = 100'+nota('Mensual. INE · IPC. El INE rebasa el índice cada pocos años. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_IPC())+
+    card('c_icm_var','Comercio minorista · variación anual',geoTag('Andalucía')+'Ventas del comercio al por menor, a precios constantes'+nota('Mensual. INE · Índice de Comercio al por Menor. Precios constantes: descuenta la inflación. En vista anual, media de las tasas mensuales (* = año incompleto).'),'live',SRC_ICM())+
+    card('c_icm_idx','Índice de comercio minorista',geoTag('Andalucía')+'Cifra de negocio a precios constantes, base 2021 = 100'+nota('Mensual. INE · ICM, serie sin desestacionalizar: diciembre marca siempre el máximo del año y enero el mínimo. Para leer la tendencia, mejor la variación anual. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_ICM(),true)+
    '</div>';
-  const N=120;   // últimos 10 años
+  const N=1e9;   // serie completa (el botón Anual la resume por años)
   const iv=tail(ipc.var_anual,N),ive=tail(ipc.var_anual_es,N);
   if(iv.length){const mp=Object.fromEntries((ipc.var_anual_es||[]).map(x=>[x.t,x.v]));
-    charts.ipcvar=new Chart(c('c_ipc_var'),{type:'line',data:{labels:iv.map(x=>lblMes(x.t)),datasets:[
+    conAnual('c_ipc_var',iv.map(x=>x.t),()=>({type:'line',data:{labels:iv.map(x=>lblMes(x.t)),datasets:[
       ds('Andalucía',iv.map(x=>x.v),COL.c1,true),dsRef('España',iv.map(x=>mp[x.t]??null),'#4a4a4f')]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,1)+'%')}})});}
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,1)+'%')}})}),'avg');}
   const ii=tail(ipc.indice,N);
   if(ii.length){const mp=Object.fromEntries((ipc.indice_es||[]).map(x=>[x.t,x.v]));
-    charts.ipcidx=new Chart(c('c_ipc_idx'),{type:'line',data:{labels:ii.map(x=>lblMes(x.t)),datasets:[
+    conAnual('c_ipc_idx',ii.map(x=>x.t),()=>({type:'line',data:{labels:ii.map(x=>lblMes(x.t)),datasets:[
       ds('Andalucía',ii.map(x=>x.v),COL.c1,true),dsRef('España',ii.map(x=>mp[x.t]??null),'#4a4a4f')]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});}
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})}),'avg');}
   const cv=tail(icm.var_anual,N);
-  if(cv.length){charts.icmvar=new Chart(c('c_icm_var'),{type:'bar',data:{labels:cv.map(x=>lblMes(x.t)),datasets:[
+  if(cv.length){conAnual('c_icm_var',cv.map(x=>x.t),()=>({type:'bar',data:{labels:cv.map(x=>lblMes(x.t)),datasets:[
     {label:'% var. anual',data:cv.map(x=>x.v),backgroundColor:cv.map(x=>x.v>=0?hexA(COL.c4,.85):hexA(COL.c2,.85)),borderRadius:3}]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>fmt(v,0)+'%')}})});}
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>fmt(v,0)+'%')}})}),'avg');}
   const ci=tail(icm.indice,N);
   if(ci.length){
     const vals=ci.map(x=>x.v);
     const media12=vals.map((_,i)=>{if(i<11)return null;const s=vals.slice(i-11,i+1);
       return +(s.reduce((a,b)=>a+b,0)/12).toFixed(1);});
-    charts.icmidx=new Chart(c('c_icm_idx'),{type:'line',data:{labels:ci.map(x=>lblMes(x.t)),datasets:[
+    conAnual('c_icm_idx',ci.map(x=>x.t),()=>({type:'line',data:{labels:ci.map(x=>lblMes(x.t)),datasets:[
       ds('Índice mensual',vals,COL.c4,true),
       Object.assign(ds('Media móvil de 12 meses',media12,COL.c1),{borderWidth:2.4,spanGaps:false})]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});}
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})}),['avg','drop']);}
 }
 
 /* ================= RENTA =================
@@ -1195,45 +1183,48 @@ function buildVivienda(){
    '<div class="pdesc">Compraventas, valor de tasación y alquiler de Marbella y, debajo, el mercado provincial (Málaga) y autonómico (Andalucía) en el que se inserta, con las series del INE.</div>'+
    '<div id="viv-mb"></div>'+
    '<div class="grid">'+
-    card('c_compraventa','Compraventa de viviendas',geoTag('Provincia de Málaga')+'Operaciones mensuales: nueva y de segunda mano'+nota('Mensual, últimos 12 años. INE · ETDP. El INE no da el dato municipal; el de Marbella, trimestral, está arriba.'),'live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
-    card('c_ipv','Precio de la vivienda · IPV',geoTag('Andalucía')+'Índice de Precios de Vivienda (base 2015=100), trimestral'+nota('Trimestral. INE · IPV. Máxima desagregación: autonómica.'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
-    card('c_ipv_var','Variación anual del precio',geoTag('Andalucía')+'% de variación interanual del precio de la vivienda'+nota('Trimestral. INE · IPV.'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
+    card('c_compraventa','Compraventa de viviendas',geoTag('Provincia de Málaga')+'<span id="cv-sub">Operaciones mensuales: nueva y de segunda mano</span>'+nota('Mensual, serie completa; en vista anual, total de cada año (* = año incompleto). INE · ETDP. El INE no da el dato municipal; el de Marbella, trimestral, está arriba.'),'live',ineTbl(6150,'ETDP compraventa (tabla 6150)'),true)+
+    card('c_ipv','Precio de la vivienda · IPV',geoTag('Andalucía')+'Índice de Precios de Vivienda (base 2015=100), trimestral'+nota('Trimestral. INE · IPV. Máxima desagregación: autonómica. En vista anual, media de cada año (* = año incompleto).'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
+    card('c_ipv_var','Variación anual del precio',geoTag('Andalucía')+'% de variación interanual del precio de la vivienda'+nota('Trimestral. INE · IPV. En vista anual, media de las tasas trimestrales (* = año incompleto).'),'live',ineTbl(80270,'IPV (tabla 80270)'))+
    '</div>'+
    '<div class="h2" style="margin-top:34px">Financiación · hipotecas</div>'+
    '<div class="pdesc">Hipotecas constituidas sobre viviendas en la provincia de Málaga: cuántas se firman cada mes y por qué importe medio. Es el indicador que mejor anticipa el enfriamiento o la reactivación de la compraventa.</div>'+
    '<div class="kpis" id="hipo-kpis"></div>'+
    '<div class="grid">'+
-    card('c_hipo','Hipotecas constituidas sobre viviendas',geoTag('Provincia de Málaga')+'Operaciones inscritas cada mes en los registros de la propiedad'+nota('Mensual. INE · Estadística de Hipotecas, ~2 meses de desfase. No existe dato municipal.'),'live',ineTbl(76317,'Hipotecas (tabla 76317)'),true)+
-    card('c_hipo_imp','Importe medio por hipoteca',geoTag('Provincia de Málaga')+'Capital prestado dividido entre el número de hipotecas del mes'+nota('Mensual. INE · Estadística de Hipotecas. Calculado sobre el importe total inscrito.'),'live',ineTbl(76317,'Hipotecas (tabla 76317)'),true)+
+    card('c_hipo','Hipotecas constituidas sobre viviendas',geoTag('Provincia de Málaga')+'Operaciones inscritas cada mes en los registros de la propiedad'+nota('Mensual. INE · Estadística de Hipotecas, ~2 meses de desfase. No existe dato municipal. En vista anual, total de cada año (* = año incompleto).'),'live',ineTbl(76317,'Hipotecas (tabla 76317)'),true)+
+    card('c_hipo_imp','Importe medio por hipoteca',geoTag('Provincia de Málaga')+'Capital prestado dividido entre el número de hipotecas del mes'+nota('Mensual. INE · Estadística de Hipotecas. Calculado sobre el importe total inscrito. En vista anual, importe medio ponderado por el número de hipotecas (* = año incompleto).'),'live',ineTbl(76317,'Hipotecas (tabla 76317)'),true)+
    '</div>';
   const v=DATA.vivienda||{};const cv=v.compraventa||{};
-  /* la serie del INE arranca en 2004: con 20 años de datos mensuales la gráfica
-     se vuelve ilegible, así que se muestran los últimos 12 años */
-  const gen=tail(cv.general,144),nu=tail(cv.nueva,144),sm=tail(cv.segunda_mano,144);
-  if(gen.length){charts.cv=new Chart(c('c_compraventa'),{type:'line',data:{labels:gen.map(x=>lblMes(x.t)),datasets:[
-    ds('Total',gen.map(x=>x.v),COL.c1,true),ds('Segunda mano',sm.map(x=>x.v),COL.c4),ds('Nueva',nu.map(x=>x.v),COL.c3)]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});}
+  // serie completa; la vista anual (totales) la hace legible de un vistazo
+  const nuM=byT(cv.nueva),smM=byT(cv.segunda_mano);
+  const gen=(cv.general||[]).map(x=>({t:x.t,g:x.v,n:nuM[x.t]??null,s:smM[x.t]??null}));
+  if(gen.length)vistaToggle('c_compraventa',v=>{const A=v==='anio'?anualDe(gen):null;
+    setSub('cv-sub',A?'Operaciones de cada año: nueva y de segunda mano':'Operaciones mensuales: nueva y de segunda mano');
+    const col=f=>A?A.map(y=>sumF(y.rs,f)):gen.map(f);
+    return new Chart(c('c_compraventa'),{type:'line',data:{labels:A?A.map(y=>y.lbl):gen.map(x=>lblMes(x.t)),datasets:[
+    ds('Total',col(x=>x.g),COL.c1,true),ds('Segunda mano',col(x=>x.s),COL.c4),ds('Nueva',col(x=>x.n),COL.c3)]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY()}})});});
   const ip=(v.precio||{}).indice||[],ipn=(v.precio||{}).indice_nueva||[],ips=(v.precio||{}).indice_segunda||[];
-  if(ip.length){charts.ipv=new Chart(c('c_ipv'),{type:'line',data:{labels:ip.map(x=>lblMes(x.t)),datasets:[
+  if(ip.length){conAnual('c_ipv',ip.map(x=>x.t),()=>({type:'line',data:{labels:ip.map(x=>lblMes(x.t)),datasets:[
     ds('General',ip.map(x=>x.v),COL.c1,true),ds('Nueva',ipn.map(x=>x.v),COL.c3),ds('Segunda mano',ips.map(x=>x.v),COL.c4)]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})});}
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v,0))}})}),'avg');}
   const va=(v.precio||{}).var_anual||[];
-  if(va.length){charts.ipvv=new Chart(c('c_ipv_var'),{type:'bar',data:{labels:va.map(x=>lblMes(x.t)),datasets:[{label:'% var. anual',data:va.map(x=>x.v),backgroundColor:va.map(x=>x.v>=0?hexA(COL.c4,.85):hexA(COL.c2,.85)),borderRadius:3}]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>v+'%')}})});}
+  if(va.length){conAnual('c_ipv_var',va.map(x=>x.t),()=>({type:'bar',data:{labels:va.map(x=>lblMes(x.t)),datasets:[{label:'% var. anual',data:va.map(x=>x.v),backgroundColor:va.map(x=>x.v>=0?hexA(COL.c4,.85):hexA(COL.c2,.85)),borderRadius:3}]},
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>v+'%')}})}),'avg');}
   /* hipotecas */
-  const hp=v.hipotecas||{};const hn=tail(hp.numero,120),hm=tail(hp.importe_medio,120);
+  const hp=v.hipotecas||{};const hn=(hp.numero||[]),hm=(hp.importe_medio||[]);
   const lh=last(hn),ph=prevY(hn),lm=last(hm);
   const kh=[];
   if(lh){const[dt,dc]=deltaTxt(ph?pct(lh.v,ph.v):null);kh.push(kpi(fmt(lh.v),'Hipotecas firmadas · '+lblMes(lh.t),dt,dc));}
   if(lm)kh.push(kpi(fmt(lm.v)+' €','Importe medio · '+lblMes(lm.t),'',''));
   if(lh&&lm)kh.push(kpi(fmt(lh.v*lm.v/1e6,1)+' M€','Capital prestado en el mes','',''));
   const khEl=document.getElementById('hipo-kpis');if(khEl)khEl.innerHTML=kh.join('');
-  if(hn.length){charts.hipo=new Chart(c('c_hipo'),{type:'bar',data:{labels:hn.map(x=>lblMes(x.t)),datasets:[
+  if(hn.length){conAnual('c_hipo',hn.map(x=>x.t),()=>({type:'bar',data:{labels:hn.map(x=>lblMes(x.t)),datasets:[
     {label:'Hipotecas',data:hn.map(x=>x.v),backgroundColor:hexA(COL.c1,.8),borderRadius:3}]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
-  if(hm.length){charts.hipoimp=new Chart(c('c_hipo_imp'),{type:'line',data:{labels:hm.map(x=>lblMes(x.t)),datasets:[
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})}),'sum');}
+  if(hm.length){conAnual('c_hipo_imp',hm.map(x=>x.t),()=>({type:'line',data:{labels:hm.map(x=>lblMes(x.t)),datasets:[
     ds('Importe medio',hm.map(x=>x.v),COL.c5,true)]},
-    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>abbr(v)+' €')}})});}
+    options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY(v=>abbr(v)+' €')}})}),[ix=>{const H=byT(hn);let a=0,n=0;ix.forEach(i=>{const h=H[hm[i].t];if(h!=null&&hm[i].v!=null){a+=h*hm[i].v;n+=h;}});return n?Math.round(a/n):null;}]);}
 }
 
 /* ---------- helpers de gráfica ---------- */
@@ -1242,8 +1233,82 @@ function ds(label,data,color,fill){return{label,data,borderColor:color,backgroun
 /* línea de referencia: discontinua, para series que se solapan casi por completo */
 function dsRef(label,data,color){return Object.assign(ds(label,data,color),{borderWidth:1.6,borderDash:[5,4]});}
 function hexA(h,a){const n=parseInt(h.slice(1),16);return'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')';}
-function doughnut(id,segsRaw){const segs=segsRaw.filter(x=>x[1]!=null);new Chart(c(id),{type:'doughnut',data:{labels:segs.map(x=>x[0]),datasets:[{data:segs.map(x=>x[1]),backgroundColor:segs.map(x=>x[2]),borderColor:'#fff',borderWidth:3,hoverOffset:6}]},options:{cutout:'62%',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,padding:12,font:{size:12}}},tooltip:{callbacks:{label:x=>x.label+': '+fmt(x.parsed)}}}}});}
-function barCat(id,labels,data,colors,unit){new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:76}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.y)+' '+unit}}},scales:{x:{grid:{display:false}},y:axY()}}});}
+function doughnut(id,segsRaw){const segs=segsRaw.filter(x=>x[1]!=null);return new Chart(c(id),{type:'doughnut',data:{labels:segs.map(x=>x[0]),datasets:[{data:segs.map(x=>x[1]),backgroundColor:segs.map(x=>x[2]),borderColor:'#fff',borderWidth:3,hoverOffset:6}]},options:{cutout:'62%',responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:8,boxHeight:8,padding:12,font:{size:12}}},tooltip:{callbacks:{label:x=>x.label+': '+fmt(x.parsed)}}}}});}
+function barCat(id,labels,data,colors,unit){return new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:76}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.y)+' '+unit}}},scales:{x:{grid:{display:false}},y:axY()}}});}
+/* ---------- Selectores de periodo ----------
+   periodPicker: gráficas "foto" (un reparto) → Mensual (cualquier mes) o Anual (total o media de un año).
+   vistaToggle: series temporales → Mensual o Anual (cada barra/punto, un año). */
+const ymLbl=t=>{const[a,m]=t.split('-');return MESES[+m-1]+' '+a;};
+const porAnio=ss=>{const g={};ss.forEach(x=>(g[x.t.slice(0,4)]=g[x.t.slice(0,4)]||[]).push(x));return g;};
+const anioCompleto=rs=>last(rs).t.slice(5)==='12';
+const anioLbl=(a,rs)=>a+(anioCompleto(rs)?'':' (ene–'+MESES[+last(rs).t.slice(5)-1]+')');
+const sumF=(rs,f)=>rs.reduce((a,x)=>a+(f(x)||0),0);
+const avgF=(rs,f)=>{const v=rs.map(f).filter(x=>x!=null);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length):null;};
+function ctlBar(id,html){c(id).parentNode.insertAdjacentHTML('beforebegin','<div class="toolbar" style="gap:10px;margin-bottom:6px">'+html+'</div>');}
+function segHtml(id,opts,on){return '<div class="seg" id="'+id+'" style="margin-bottom:0">'+opts.map(([v,l])=>'<button data-v="'+v+'"'+(v===on?' class="on"':'')+'>'+l+'</button>').join('')+'</div>';}
+function segBind(id,cb){const w=c(id);w.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  if(b.classList.contains('on'))return;w.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));cb(b.dataset.v);}));}
+function redraw(id,mk){if(charts['pp_'+id])charts['pp_'+id].destroy();charts['pp_'+id]=mk();}
+// draw(filas, etiqueta, esAnual): una fila si es un mes; todas las del año si es anual.
+function periodPicker(id,ss,anualTxt,draw){
+  if(!ss.length)return;
+  const sid=id+'-modo',pid=id+'-per',G=porAnio(ss),anios=Object.keys(G).sort();
+  ctlBar(id,segHtml(sid,[['mes','Mensual'],['anio',anualTxt]],'mes')+'<select class="btn" id="'+pid+'" aria-label="Periodo"></select>');
+  const st={modo:'mes',per:last(ss).t};
+  const fill=()=>{const sel=c(pid);
+    sel.innerHTML=st.modo==='mes'?ss.slice().reverse().map(x=>'<option value="'+x.t+'">'+ymLbl(x.t)+'</option>').join('')
+      :anios.slice().reverse().map(a=>'<option value="'+a+'">'+anioLbl(a,G[a])+'</option>').join('');
+    sel.value=st.per;};
+  const run=()=>{if(st.modo==='mes'){const r=ss.find(x=>x.t===st.per)||last(ss);draw([r],ymLbl(r.t),false);}
+    else{const rs=G[st.per];draw(rs,anioLbl(st.per,rs)+(anioCompleto(rs)?'':(st.per===last(anios)?', año en curso':', meses con dato')),true);}};
+  segBind(sid,v=>{st.modo=v;st.per=v==='mes'?last(ss).t:(anios.filter(a=>anioCompleto(G[a])).pop()||last(anios));fill();run();});
+  c(pid).addEventListener('change',e=>{st.per=e.target.value;run();});
+  fill();run();
+}
+// render(vista) devuelve el Chart; vista = 'mes' | 'anio'.
+function vistaToggle(id,render){
+  ctlBar(id,segHtml(id+'-vista',[['mes','Mensual'],['anio','Anual']],'mes'));
+  const go=v=>redraw(id,()=>render(v));segBind(id+'-vista',go);go('mes');
+}
+// Serie anual [{a, lbl, rs}] a partir de una mensual (* = año incompleto).
+const anualDe=ss=>{const G=porAnio(ss);return Object.keys(G).sort().map(a=>({a,lbl:anioCompleto(G[a])?a:a+'*',rs:G[a]}));};
+const axAnio={grid:{display:false},ticks:{autoSkip:true,maxRotation:0}};
+// Solo años (datos anuales): extra = opciones previas, p. ej. [['u12','Últimos 12 meses']].
+function yearPicker(id,years,draw,extra){
+  const pid=id+'-y';ctlBar(id,'<select class="btn" id="'+pid+'" aria-label="Periodo"></select>');
+  const sel=c(pid);sel.innerHTML=(extra||[]).concat(years.slice().reverse().map(y=>[String(y),String(y)]))
+    .map(([v,l])=>'<option value="'+v+'">'+l+'</option>').join('');
+  sel.addEventListener('change',()=>draw(sel.value));draw(sel.value);
+}
+/* conAnual: añade Mensual/Anual a una serie temporal ya existente.
+   ts = periodos 'AAAA-MM' alineados con labels; mk() devuelve la config mensual.
+   agg = 'sum' | 'avg' | 'drop' (el dataset no se muestra en anual) | función(índices) → valor;
+   o un array con uno de esos por dataset. En anual, * = año incompleto. */
+function conAnual(id,ts,mk,agg,subs){
+  vistaToggle(id,v=>{
+    const cfg=mk();if(subs)setSub(subs[0],v==='anio'?subs[2]:subs[1]);
+    if(v==='mes')return new Chart(c(id),cfg);
+    const G={};ts.forEach((t,i)=>{if(t)(G[t.slice(0,4)]=G[t.slice(0,4)]||[]).push(i);});
+    const A=Object.keys(G).sort();
+    const dss=[];cfg.data.datasets.forEach((d,j)=>{
+      const ag=Array.isArray(agg)?agg[j]:agg;if(ag==='drop')return;
+      const data=A.map(a=>{const ix=G[a];if(typeof ag==='function')return ag(ix);
+        const w=ix.map(i=>d.data[i]).filter(x=>x!=null);if(!w.length)return null;
+        const sm=w.reduce((p,q)=>p+q,0);if(ag==='sum')return sm;
+        const m=sm/w.length;return w.every(Number.isInteger)?Math.round(m):+m.toFixed(Math.abs(m)>=1000?0:2);});
+      const nd=Object.assign({},d,{data});
+      if(Array.isArray(d.backgroundColor)){   // colores por signo (barras +/-)
+        const pos=d.backgroundColor[d.data.findIndex(x=>x!=null&&x>=0)]||d.backgroundColor[0];
+        const neg=d.backgroundColor[d.data.findIndex(x=>x!=null&&x<0)]||pos;
+        nd.backgroundColor=data.map(x=>x!=null&&x<0?neg:pos);}
+      if(cfg.type!=='bar'&&d.type!=='bar')nd.pointRadius=3;
+      dss.push(nd);});
+    cfg.data={labels:A.map(a=>ts[last(G[a])].slice(5,7)==='12'?a:a+'*'),datasets:dss};
+    const sc=cfg.options&&cfg.options.scales;
+    if(sc&&sc.x)sc.x=Object.assign({},sc.x,{ticks:{autoSkip:true,maxRotation:0}});
+    return new Chart(c(id),cfg);});
+}
+function setSub(id,txt){const e=c(id);if(e)e.textContent=txt;}
 function barCatH(id,labels,data,colors,unit){return new Chart(c(id),{type:'bar',data:{labels,datasets:[{data,backgroundColor:colors,borderRadius:6,maxBarThickness:30}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>fmt(x.parsed.x)+' '+unit}}},scales:{x:axY(),y:{grid:{display:false}}}}});}
 
 
@@ -1341,13 +1406,16 @@ function extraLaboral(){
    '<div class="pdesc">Media anual del paro registrado en Marbella según la nacionalidad de la persona demandante. En <b>'+l.y+'</b>, <b>'+fmt(l.extranjera)+'</b> de los '+fmt(l.total)+' parados eran extranjeros (el '+fmt(pe,1)+' %).</div>'+
    '<div class="grid">'+
     card('c_paro_nac','Paro registrado por nacionalidad',geoTag('Marbella')+'Media de los doce meses, españoles y extranjeros (apilado)'+nota('Anual. IECA · SIMA; el año se cierra en el primer trimestre del siguiente.'),'stat',SRC_SIMA(37028),true)+
-    card('c_paro_orig','Paro extranjero por zona de origen',geoTag('Marbella')+'Media anual del último año, por nacionalidad agrupada'+nota('Anual. IECA · SIMA.'),'stat',SRC_SIMA(37028))+
+    card('c_paro_orig','Paro extranjero por zona de origen',geoTag('Marbella')+'<span id="paroorig-sub">Media anual del último año, por nacionalidad agrupada</span>'+nota('Anual. IECA · SIMA.'),'stat',SRC_SIMA(37028))+
     card('c_paro_pctext','Peso de los extranjeros en el paro',geoTag('Marbella')+'% de parados extranjeros sobre el total'+nota('Anual. Calculado con la media anual.'),'stat',SRC_SIMA(37028))+
    '</div>');
   charts.paronac=new Chart(c('c_paro_nac'),stackNac(p.map(x=>x.y),p.map(x=>x.espanola),p.map(x=>x.extranjera),'Española','Extranjera'));
-  const g=l.grupos||{},G=[['ue15','UE (15)'],['resto_ue','Resto UE'],['resto_europa','Resto de Europa'],['africa','África'],['america_latina','América Latina'],['resto_mundo','Resto del mundo'],['resto_america','Resto de América']]
-    .filter(([k])=>g[k]!=null).sort((a,b)=>g[b[0]]-g[a[0]]);
-  barCatH('c_paro_orig',G.map(x=>x[1]),G.map(x=>g[x[0]]),G.map(()=>COL.c4),'parados');
+  const PG=p.filter(x=>x.grupos);
+  if(PG.length)yearPicker('c_paro_orig',PG.map(x=>x.y),y=>{
+    const g=(PG.find(x=>String(x.y)===y)||last(PG)).grupos,G=[['ue15','UE (15)'],['resto_ue','Resto UE'],['resto_europa','Resto de Europa'],['africa','África'],['america_latina','América Latina'],['resto_mundo','Resto del mundo'],['resto_america','Resto de América']]
+      .filter(([k])=>g[k]!=null).sort((a,b)=>g[b[0]]-g[a[0]]);
+    setSub('paroorig-sub','Paro extranjero medio de '+y+', por nacionalidad agrupada');
+    redraw('c_paro_orig',()=>barCatH('c_paro_orig',G.map(x=>x[1]),G.map(x=>g[x[0]]),G.map(()=>COL.c4),'parados'));});
   charts.paropct=new Chart(c('c_paro_pctext'),lineYear(p.map(x=>x.y),[ds('% extranjeros',p.map(x=>x.total?+(x.extranjera/x.total*100).toFixed(1):null),COL.c4,true)],v=>v+'%'));
 }
 
@@ -1380,24 +1448,30 @@ function extraContr(){
 /* --- Turismo: residentes en España vs. en el extranjero (INE EOH) --- */
 function extraTurismo(){
   const t=(DATA.turismo&&DATA.turismo.hoteles)||{};
-  const ve=tail(t.viajeros_esp,60);if(!ve.length||!(t.viajeros_ext||[]).length)return;
+  const ve=t.viajeros_esp||[];if(!ve.length||!(t.viajeros_ext||[]).length)return;
   const mx=byT(t.viajeros_ext),pe=byT(t.pernoct_esp),px=byT(t.pernoct_ext);
   const l=last(ve),lx=mx[l.t],sh=lx!=null?lx/(lx+l.v)*100:null;
   addBlock('turismo','<div class="h2" style="margin-top:34px">Turismo nacional e internacional</div>'+
    '<div class="pdesc">Viajeros alojados en los hoteles de Marbella según su <b>país de residencia</b>. En <b>'+lblMes(l.t)+'</b>, el '+fmt(sh,1)+' % de los viajeros residían en el extranjero.</div>'+
    '<div class="grid">'+
-    card('c_tur_res','Viajeros por lugar de residencia',geoTag('Marbella')+'Residentes en España y en el extranjero, últimos cinco años (apilado)'+nota('Mensual. INE · EOH, ~1 mes de desfase.'),'live',ineSerie('EOT2760','EOH viajeros residentes en el extranjero'),true)+
-    card('c_tur_pctext','Peso del mercado internacional',geoTag('Marbella')+'% de viajeros y de pernoctaciones de residentes en el extranjero'+nota('Mensual. INE · EOH.'),'live',ineSerie('EOT2762','EOH pernoctaciones residentes en el extranjero'),true)+
+    card('c_tur_res','Viajeros por lugar de residencia',geoTag('Marbella')+'<span id="turres-sub">Residentes en España y en el extranjero, cada mes (apilado)</span>'+nota('Mensual. INE · EOH, ~1 mes de desfase.'),'live',ineSerie('EOT2760','EOH viajeros residentes en el extranjero'),true)+
+    card('c_tur_pctext','Peso del mercado internacional',geoTag('Marbella')+'<span id="turpct-sub">% de viajeros y de pernoctaciones de residentes en el extranjero</span>'+nota('Mensual o anual (sobre los totales del año). INE · EOH.'),'live',ineSerie('EOT2762','EOH pernoctaciones residentes en el extranjero'),true)+
    '</div>');
-  const L=ve.map(x=>lblMes(x.t));
-  charts.turres=new Chart(c('c_tur_res'),{type:'bar',data:{labels:L,datasets:[
-    {label:'Residentes en España',data:ve.map(x=>x.v),backgroundColor:hexA(COL.c1,.85),stack:'v'},
-    {label:'Residentes en el extranjero',data:ve.map(x=>mx[x.t]??null),backgroundColor:hexA(COL.c4,.85),stack:'v'}]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},axMes),y:Object.assign({stacked:true},axY())}})});
-  const pv=ve.map(x=>mx[x.t]!=null?+(mx[x.t]/(mx[x.t]+x.v)*100).toFixed(1):null);
-  const pp=ve.map(x=>(px[x.t]!=null&&pe[x.t]!=null)?+(px[x.t]/(px[x.t]+pe[x.t])*100).toFixed(1):null);
-  charts.turpct=new Chart(c('c_tur_pctext'),{type:'line',data:{labels:L,datasets:[ds('% viajeros extranjeros',pv,COL.c4,true),ds('% pernoctaciones extranjeros',pp,COL.c5)]},
-    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>v+'%')}})});
+  // serie completa (mensual) o resumida por años
+  const R=ve.map(x=>({t:x.t,ve:x.v,vx:mx[x.t]??null,pe:pe[x.t]??null,px:px[x.t]??null}));
+  vistaToggle('c_tur_res',v=>{const A=v==='anio'?anualDe(R):null;
+    setSub('turres-sub',A?'Residentes en España y en el extranjero, total de cada año (apilado)':'Residentes en España y en el extranjero, cada mes (apilado)');
+    const col=f=>A?A.map(y=>sumF(y.rs,f)):R.map(f);
+    return new Chart(c('c_tur_res'),{type:'bar',data:{labels:A?A.map(y=>y.lbl):R.map(x=>lblMes(x.t)),datasets:[
+    {label:'Residentes en España',data:col(x=>x.ve),backgroundColor:hexA(COL.c1,.85),stack:'v'},
+    {label:'Residentes en el extranjero',data:col(x=>x.vx),backgroundColor:hexA(COL.c4,.85),stack:'v'}]},
+    options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},A?axAnio:axMes),y:Object.assign({stacked:true},axY())}})});});
+  const cuota=(rs,a,b)=>{const ok=rs.filter(x=>x[a]!=null&&x[b]!=null);const sa=sumF(ok,x=>x[a]),sb=sumF(ok,x=>x[b]);return ok.length&&sa+sb?+(sb/(sa+sb)*100).toFixed(1):null;};
+  vistaToggle('c_tur_pctext',v=>{const A=v==='anio'?anualDe(R):null;const G=A?A.map(y=>y.rs):R.map(x=>[x]);
+    setSub('turpct-sub',A?'% de viajeros y de pernoctaciones de residentes en el extranjero, por año':'% de viajeros y de pernoctaciones de residentes en el extranjero');
+    return new Chart(c('c_tur_pctext'),{type:'line',data:{labels:A?A.map(y=>y.lbl):R.map(x=>lblMes(x.t)),datasets:[
+      ds('% viajeros extranjeros',G.map(rs=>cuota(rs,'ve','vx')),COL.c4,true),ds('% pernoctaciones extranjeros',G.map(rs=>cuota(rs,'pe','px')),COL.c5)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:A?axAnio:axMes,y:axY(v=>v+'%')}})});});
 }
 
 /* --- Demografía: residentes por nacionalidad/nacimiento/edad, migraciones, natalidad --- */
@@ -1416,7 +1490,7 @@ function extraDemografia(){
      '<div class="grid">'+
       card('c_res_nac','Población por nacionalidad',geoTag('Marbella')+'Residentes de nacionalidad española y extranjera a 1 de enero (apilado)'+nota('Anual. INE · Estadística Continua de Población (tabla 79544).'),'stat',ineTbl(79544,'ECP · nacionalidad (tabla 79544)'),true)+
       card('c_res_nacim','Por lugar de nacimiento',geoTag('Marbella')+'Nacidos en España y en el extranjero'+nota('Anual. INE · ECP (tabla 79545). Incluye a los españoles nacidos fuera.'),'stat',ineTbl(79545,'ECP · lugar de nacimiento (tabla 79545)'))+
-      card('c_res_edad','Población por grupos de edad',geoTag('Marbella')+'Residentes a 1 de enero del último año'+nota('Anual. INE · ECP (tabla 79543).'),'stat',ineTbl(79543,'ECP · edad (tabla 79543)'))+
+      card('c_res_edad','Población por grupos de edad',geoTag('Marbella')+'<span id="resedad-sub">Residentes a 1 de enero del último año</span>'+nota('Anual. INE · ECP (tabla 79543).'),'stat',ineTbl(79543,'ECP · edad (tabla 79543)'))+
      '</div>';
   }
   if(se.length){
@@ -1440,8 +1514,11 @@ function extraDemografia(){
     charts.resnac=new Chart(c('c_res_nac'),stackNac(ne.map(x=>x.y),ne.map(x=>x.v),ne.map(x=>mx[x.y]??null),'Española','Extranjera'));
     const be=R.nacidos_espana||[],bx=byY(R.nacidos_extranjero);
     if(be.length)charts.resnacim=new Chart(c('c_res_nacim'),lineYear(be.map(x=>x.y),[ds('Nacidos en España',be.map(x=>x.v),COL.c1,true),ds('Nacidos en el extranjero',be.map(x=>bx[x.y]??null),COL.c4,true)]));
-    const E=[['edad_0_15','0-15'],['edad_16_24','16-24'],['edad_25_44','25-44'],['edad_45_64','45-64'],['edad_65','65 y más']].map(([k,n])=>[n,last(R[k]||[])]).filter(x=>x[1]);
-    if(E.length)barCat('c_res_edad',E.map(x=>x[0]),E.map(x=>x[1].v),[COL.c4,COL.c3,COL.c1,COL.c5,COL.c6],'personas');
+    const EG=[['edad_0_15','0-15'],['edad_16_24','16-24'],['edad_25_44','25-44'],['edad_45_64','45-64'],['edad_65','65 y más']].filter(([k])=>(R[k]||[]).length);
+    const EY=[...new Set(EG.flatMap(([k])=>R[k].map(x=>x.y)))].sort();
+    if(EG.length)yearPicker('c_res_edad',EY,y=>{
+      setSub('resedad-sub','Residentes a 1 de enero de '+y);
+      redraw('c_res_edad',()=>barCat('c_res_edad',EG.map(x=>x[1]),EG.map(([k])=>(R[k].find(p=>String(p.y)===y)||{}).v??null),[COL.c4,COL.c3,COL.c1,COL.c5,COL.c6],'personas'));});
   }
   if(se.length){const si=byY(M.saldo_interior);
     charts.migsaldo=new Chart(c('c_mig_saldo'),{type:'bar',data:{labels:se.map(x=>x.y),datasets:[
@@ -1470,7 +1547,7 @@ function extraDemografia(){
 /* --- Vivienda en Marbella (MIVAU + IPVA): se pinta en #viv-mb, antes del contexto provincial --- */
 function extraVivienda(){
   const el=document.getElementById('viv-mb');if(!el)return;
-  const V=DATA.vivienda_marbella||{},cv=V.compraventas||{},tot=tail(cv.total,48),VT=V.valor_tasado||{},vt=VT.total||[],al=V.alquiler||{};
+  const V=DATA.vivienda_marbella||{},cv=V.compraventas||{},tot=cv.total||[],VT=V.valor_tasado||{},vt=VT.total||[],al=V.alquiler||{};
   if(!tot.length&&!vt.length)return;
   const k=[];
   const ft=cv.total||[],lt=last(ft),pt=ft.length>4?ft[ft.length-5]:null;
@@ -1483,20 +1560,24 @@ function extraVivienda(){
    '<div class="pdesc">Mercado de vivienda del propio municipio: compraventas ante notario y valor de tasación del Ministerio de Vivienda (trimestral) y el índice de precios del alquiler del INE (anual).</div>'+
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
-    card('c_mb_cv','Compraventas de vivienda',geoTag('Marbella')+'Transacciones por trimestre, nueva y de segunda mano (apilado), últimos doce años'+nota('Trimestral desde 2004. MIVAU, con datos del Consejo General del Notariado. El último trimestre es provisional.'),'live',SRC_MIVAU_TR,true)+
-    card('c_mb_vt','Valor tasado de la vivienda libre',geoTag('Marbella')+'€/m², total y según antigüedad de la vivienda'+nota('Trimestral. MIVAU · municipios de más de 25.000 habitantes.'),'live',SRC_MIVAU_VT,true)+
+    card('c_mb_cv','Compraventas de vivienda',geoTag('Marbella')+'<span id="mbcv-sub">Transacciones por trimestre, nueva y de segunda mano (apilado)</span>'+nota('Trimestral desde 2004; en vista anual, total de cada año (* = año incompleto). MIVAU, con datos del Consejo General del Notariado. El último trimestre es provisional.'),'live',SRC_MIVAU_TR,true)+
+    card('c_mb_vt','Valor tasado de la vivienda libre',geoTag('Marbella')+'€/m², total y según antigüedad de la vivienda'+nota('Trimestral. MIVAU · municipios de más de 25.000 habitantes. En vista anual, media de cada año (* = año incompleto).'),'live',SRC_MIVAU_VT,true)+
     card('c_mb_alq','Precio del alquiler',geoTag('Marbella')+'Índice de precios de vivienda en alquiler (2015=100) y su variación anual'+nota('Anual. INE · IPVA (tabla 59060), a partir de datos fiscales; el año N se publica a finales de N+2.'),'stat',ineTbl(59060,'IPVA · municipios (tabla 59060)'),true)+
    '</div>'+
    '<div class="h2" style="margin-top:34px">Contexto provincial y autonómico</div>';
   if(tot.length){const nu=byT(cv.nueva),sm=byT(cv.segunda_mano);
-    charts.mbcv=new Chart(c('c_mb_cv'),{type:'bar',data:{labels:tot.map(x=>lblTrim(x.t)),datasets:[
-      {label:'Segunda mano',data:tot.map(x=>sm[x.t]??null),backgroundColor:hexA(COL.c4,.85),stack:'t'},
-      {label:'Nueva',data:tot.map(x=>nu[x.t]??null),backgroundColor:hexA(COL.c3,.85),stack:'t'}]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},axMes),y:Object.assign({stacked:true},axY())}})});}
+    const Q=tot.map(x=>({t:x.t,s:sm[x.t]??null,n:nu[x.t]??null}));
+    vistaToggle('c_mb_cv',v=>{const A=v==='anio'?anualDe(Q):null;
+      setSub('mbcv-sub',A?'Transacciones de cada año, nueva y de segunda mano (apilado)':'Transacciones por trimestre, nueva y de segunda mano (apilado)');
+      const col=f=>A?A.map(y=>sumF(y.rs,f)):Q.map(f);
+      return new Chart(c('c_mb_cv'),{type:'bar',data:{labels:A?A.map(y=>y.lbl):Q.map(x=>lblTrim(x.t)),datasets:[
+      {label:'Segunda mano',data:col(x=>x.s),backgroundColor:hexA(COL.c4,.85),stack:'t'},
+      {label:'Nueva',data:col(x=>x.n),backgroundColor:hexA(COL.c3,.85),stack:'t'}]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:Object.assign({stacked:true},A?axAnio:axMes),y:Object.assign({stacked:true},axY())}})});});}
   if(vt.length){const h5=byT(VT.hasta5),m5=byT(VT.mas5);
-    charts.mbvt=new Chart(c('c_mb_vt'),{type:'line',data:{labels:vt.map(x=>lblTrim(x.t)),datasets:[
+    conAnual('c_mb_vt',vt.map(x=>x.t),()=>({type:'line',data:{labels:vt.map(x=>lblTrim(x.t)),datasets:[
       ds('Total',vt.map(x=>x.v),COL.c1,true),ds('Hasta 5 años',vt.map(x=>h5[x.t]??null),COL.c3),ds('Más de 5 años',vt.map(x=>m5[x.t]??null),COL.c4)]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v)+' €')}})});}
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY(v=>fmt(v)+' €')}})}),'avg');}
   const ai=al.indice||[];
   if(ai.length){const av=byY(al.var_anual);
     charts.mbalq=new Chart(c('c_mb_alq'),{type:'bar',data:{labels:ai.map(x=>x.y),datasets:[
@@ -1543,9 +1624,9 @@ function extraTurismo2(){
      '<div class="pdesc"><b>Aviso:</b> el INE dejó de actualizar la serie de turistas <b>extranjeros</b> en diciembre de 2025 porque está integrando los datos de las operadoras móviles en FRONTUR. Las cifras municipales volverán dentro de FRONTUR, sin fecha anunciada y no comparables con esta serie. La de turistas españoles sigue actualizándose cada mes.</div>'+
      '<div class="kpis">'+k.join('')+'</div>'+
      '<div class="grid">'+
-      card('c_tm_evol','Turistas al mes',geoTag('Marbella')+'Extranjeros y españoles residentes en otras provincias'+nota('Mensual. INE · medición del turismo con móviles. La serie de extranjeros termina en diciembre de 2025: el INE la cerró para integrarla en FRONTUR.'),'live',SRC_TMOV_INT,true)+
-      card('c_tm_paises','Principales países de origen',geoTag('Marbella')+'Turistas extranjeros en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 52048 (cerrada en diciembre de 2025).'),'live',SRC_TMOV_INT)+
-      card('c_tm_ccaa','Turismo nacional por comunidad de origen',geoTag('Marbella')+'Turistas españoles en los últimos 12 meses publicados'+nota('Mensual, suma de 12 meses. INE · tabla 53464. No incluye a los residentes en la provincia de Málaga.'),'live',SRC_TMOV_NAC)+
+      card('c_tm_evol','Turistas al mes',geoTag('Marbella')+'Extranjeros y españoles residentes en otras provincias'+nota('Mensual. INE · medición del turismo con móviles. La serie de extranjeros termina en diciembre de 2025: el INE la cerró para integrarla en FRONTUR. En vista anual, total de cada año (* = año incompleto).'),'live',SRC_TMOV_INT,true)+
+      card('c_tm_paises','Principales países de origen',geoTag('Marbella')+'<span id="tmp-sub">Turistas extranjeros en los últimos 12 meses publicados</span>'+nota('Últimos 12 meses o total de un año (selector). INE · tabla 52048 (cerrada en diciembre de 2025).'),'live',SRC_TMOV_INT)+
+      card('c_tm_ccaa','Turismo nacional por comunidad de origen',geoTag('Marbella')+'<span id="tmc-sub">Turistas españoles en los últimos 12 meses publicados</span>'+nota('Últimos 12 meses o total de un año (selector). INE · tabla 53464. No incluye a los residentes en la provincia de Málaga.'),'live',SRC_TMOV_NAC)+
      '</div>';
   }
   const S=DATA.sima||{},pl=(S.plazas_turisticas||[]),vf=(S.vft||[]);
@@ -1564,12 +1645,19 @@ function extraTurismo2(){
   if(it.length||nt.length){
     const mi=byT(it),mn=byT(nt);
     const allT=[...new Set([...it.map(x=>x.t),...nt.map(x=>x.t)])].sort();
-    charts.tmevol=new Chart(c('c_tm_evol'),{type:'line',data:{labels:allT.map(lblMes),datasets:[ds('Extranjeros',allT.map(t=>mi[t]??null),COL.c4,true),ds('Españoles de otras provincias',allT.map(t=>mn[t]??null),COL.c1)]},
-      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})});
-    const P=Object.entries(I.paises||{}).map(([n,a])=>[n,sum12(a)]).sort((a,b)=>b[1]-a[1]).slice(0,12);
-    if(P.length)barCatH('c_tm_paises',P.map(x=>x[0]),P.map(x=>x[1]),P.map(()=>COL.c4),'turistas');
-    const C=Object.entries(N.origen||{}).map(([n,a])=>[n,sum12(a)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    if(C.length)barCatH('c_tm_ccaa',C.map(x=>x[0]),C.map(x=>x[1]),C.map(()=>COL.c1),'turistas');
+    conAnual('c_tm_evol',allT,()=>({type:'line',data:{labels:allT.map(lblMes),datasets:[ds('Extranjeros',allT.map(t=>mi[t]??null),COL.c4,true),ds('Españoles de otras provincias',allT.map(t=>mn[t]??null),COL.c1)]},
+      options:baseOpts({plugins:{legend:{position:'bottom'}},scales:{x:axMes,y:axY()}})}),'sum');
+    // Últimos 12 meses o total de un año natural (marcando los años incompletos)
+    const tmPick=(id,sub,obj,quien,top,col)=>{
+      const ent=Object.entries(obj||{});if(!ent.length)return;
+      const ts=[...new Set(ent.flatMap(([,a])=>(a||[]).map(x=>x.t)))].sort(),G=porAnio(ts.map(t=>({t})));
+      yearPicker(id,Object.keys(G).sort(),y=>{
+        const f=y==='u12'?a=>sum12(a):a=>(a||[]).filter(x=>x.t.startsWith(y)).reduce((s,x)=>s+(x.v||0),0);
+        const D=ent.map(([n,a])=>[n,f(a)]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,top);
+        setSub(sub,y==='u12'?'Turistas '+quien+' en los últimos 12 meses publicados':'Turistas '+quien+' en '+anioLbl(y,G[y]));
+        redraw(id,()=>barCatH(id,D.map(x=>x[0]),D.map(x=>x[1]),D.map(()=>col),'turistas'));},[['u12','Últimos 12 meses']]);};
+    tmPick('c_tm_paises','tmp-sub',I.paises,'extranjeros',12,COL.c4);
+    tmPick('c_tm_ccaa','tmc-sub',N.origen,'españoles',10,COL.c1);
   }
   if(pl.length||vf.length){
     const yrs=[...new Set([...pl.map(x=>x.y),...vf.map(x=>x.y)])].sort();
@@ -1596,10 +1684,14 @@ function extraEmpresas(){
   addBlock('empresas','<div class="h2" style="margin-top:34px">Establecimientos con actividad económica</div>'+
    '<div class="pdesc">Locales donde se ejerce una actividad (una empresa puede tener varios). En <b>'+l.y+'</b> había <b>'+fmt(tot)+'</b> establecimientos en Marbella.</div>'+
    '<div class="grid">'+
-    card('c_estab_act','Establecimientos por actividad',geoTag('Marbella')+'Último año, por sección de actividad'+nota('Anual. IECA · Directorio de Empresas y Establecimientos con Actividad Económica en Andalucía.'),'stat',SRC_SIMA(22591),true)+
+    card('c_estab_act','Establecimientos por actividad',geoTag('Marbella')+'<span id="estab-sub">Último año, por sección de actividad</span>'+nota('Anual. IECA · Directorio de Empresas y Establecimientos con Actividad Económica en Andalucía.'),'stat',SRC_SIMA(22591),true)+
     card('c_estab_evo','Evolución de los establecimientos',geoTag('Marbella')+'Total por año'+nota('Anual. IECA · directorio de establecimientos.'),'stat',SRC_SIMA(22591),true)+
    '</div>');
-  barCatH('c_estab_act',cats.map(x=>x[0]),cats.map(x=>x[1]),cats.map(()=>COL.c1),'establecimientos');
+  yearPicker('c_estab_act',E.map(r=>r.y),y=>{
+    const r=E.find(x=>String(x.y)===y)||l;
+    const cs=Object.entries(r).filter(([k,v])=>k!=='y'&&typeof v==='number'&&!/total/i.test(k)).sort((a,b)=>b[1]-a[1]);
+    setSub('estab-sub','Año '+y+', por sección de actividad');
+    redraw('c_estab_act',()=>barCatH('c_estab_act',cs.map(x=>x[0]),cs.map(x=>x[1]),cs.map(()=>COL.c1),'establecimientos'));});
   const ev=E.map(r=>({y:r.y,v:Object.entries(r).filter(([k,v])=>k!=='y'&&typeof v==='number'&&!/total/i.test(k)).reduce((s,x)=>s+x[1],0)}));
   charts.estabevo=new Chart(c('c_estab_evo'),lineYear(ev.map(x=>x.y),[ds('Establecimientos',ev.map(x=>x.v),COL.c1,true)]));
 }
@@ -1617,14 +1709,14 @@ function extraCoyuntura(){
    '<div class="pdesc">Indicadores de actividad con dato propio del municipio: compra de vehículos, consumo de electricidad y endeudamiento del Ayuntamiento.</div>'+
    '<div class="kpis">'+k.join('')+'</div>'+
    '<div class="grid">'+
-    card('c_matric','Vehículos matriculados',geoTag('Marbella')+'Matriculaciones de cada mes'+nota('Mensual, publicado por años completos. IECA a partir de la DGT.'),'stat',SRC_SIMA(1274),true)+
+    card('c_matric','Vehículos matriculados',geoTag('Marbella')+'Matriculaciones de cada mes'+nota('Mensual, publicado por años completos. IECA a partir de la DGT. En vista anual, total de cada año (* = año incompleto).'),'stat',SRC_SIMA(1274),true)+
     card('c_elec','Consumo de electricidad por sector',geoTag('Marbella')+'MWh al año (apilado)'+nota('Anual. IECA, a partir de datos de la distribuidora (Endesa).'),'stat',SRC_SIMA(39837),true)+
     card('c_vehic','Parque de vehículos',geoTag('Marbella')+'Turismos, motocicletas y furgonetas en circulación'+nota('Anual. IECA a partir de la DGT.'),'stat',SRC_SIMA(1231))+
     card('c_deuda','Deuda viva del Ayuntamiento',geoTag('Ayuntamiento de Marbella')+'Millones de euros a 31 de diciembre y euros por habitante'+nota('Anual. Ministerio de Hacienda; el 31-12 del año N se publica a mediados de N+1.'),'stat',SRC_DEUDA)+
    '</div>');
   if(MT.length){const pts=[];MT.forEach(r=>MES_CAP.forEach((m,i)=>{if(r[m]!=null)pts.push({t:r.y+'-'+String(i+1).padStart(2,'0'),v:r[m]});}));
-    charts.matric=new Chart(c('c_matric'),{type:'bar',data:{labels:pts.map(x=>lblMes(x.t)),datasets:[{label:'Matriculaciones',data:pts.map(x=>x.v),backgroundColor:hexA(COL.c1,.8),borderRadius:2}]},
-      options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})});}
+    conAnual('c_matric',pts.map(x=>x.t),()=>({type:'bar',data:{labels:pts.map(x=>lblMes(x.t)),datasets:[{label:'Matriculaciones',data:pts.map(x=>x.v),backgroundColor:hexA(COL.c1,.8),borderRadius:2}]},
+      options:baseOpts({plugins:{legend:{display:false}},scales:{x:axMes,y:axY()}})}),'sum');}
   if(EL.length){const sec=['Sector residencial','Comercio_Servicios','Industria','Administración-Servicios públicos','Agricultura','Resto'];
     const lbl={'Comercio_Servicios':'Comercio y servicios','Administración-Servicios públicos':'Administración y servicios públicos'};
     charts.elec=new Chart(c('c_elec'),{type:'bar',data:{labels:EL.map(x=>x.y),datasets:sec.map((s,i)=>({label:lbl[s]||s,data:EL.map(x=>x[s]??null),backgroundColor:hexA(PAL[i],.85),stack:'e'}))},
