@@ -657,7 +657,7 @@ function buildContr(){
    '<div class="grid">'+
     card('c_contr','Indefinidos vs. temporales',geoTag('Marbella')+'<span id="contr-sub">Contratos iniciales y convertidos por tipo, cada mes</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto). Argos lo publica el 2.º día hábil del mes siguiente.'),'live',argosContrSrc(),true)+
     card('c_temp','Tasa de temporalidad',geoTag('Marbella')+'<span id="temp-sub">% de contratos temporales sobre el total mensual</span>'+nota('Mensual o anual. Calculada como temporales ÷ total del periodo.'),'live',argosContrSrc(),true)+
-    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'<span id="csexo-sub">Contratos de cada mes por sexo y tipo (indefinidos en azul y turquesa; temporales en naranja y rojo, discontinuos)</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto).'),'live',argosContrSrc(),true)+
+    card('c_contr_sexo','Contratación por sexo y tipo',geoTag('Marbella')+'<span id="csexo-sub">Contratos de cada mes por sexo y tipo (indefinidos en azul y turquesa; temporales en amarillo y granate, discontinuos)</span>'+nota('Mensual desde 2006; en vista anual, total de cada año (* = año incompleto).'),'live',argosContrSrc(),true)+
     card('c_contr_sec','Contratos por sector',geoTag('Marbella')+'<span id="csec-sub">Distribución sectorial del último mes</span>'+nota('Mensual desde 2006 o total de un año. Elige el periodo con el selector.'),'live',argosContrSrc(),true)+
    '</div>';
   const s=(DATA.contratos_mensual||{}).serie||[];if(!s.length)return;
@@ -682,10 +682,10 @@ function buildContr(){
   const CS=s.filter(x=>x.indef_h!=null);
   // indefinidos en colores fríos y temporales en cálidos (y discontinuos)
   const CK=[['Hombres · indefinidos','indef_h',COL.c1,false],['Mujeres · indefinidos','indef_m',COL.c4,false],
-            ['Hombres · temporales','temp_h',COL.c6,true],['Mujeres · temporales','temp_m',COL.c2,true]];
+            ['Hombres · temporales','temp_h',COL.c3,true],['Mujeres · temporales','temp_m','#c2185b',true]];
   if(CS.length)vistaToggle('c_contr_sexo',v=>{
     const A=v==='anio'?anualDe(CS):null;
-    setSub('csexo-sub',(A?'Contratos de cada año':'Contratos de cada mes')+' por sexo y tipo (indefinidos en azul y turquesa; temporales en naranja y rojo, discontinuos)');
+    setSub('csexo-sub',(A?'Contratos de cada año':'Contratos de cada mes')+' por sexo y tipo (indefinidos en azul y turquesa; temporales en amarillo y granate, discontinuos)');
     const col=k=>A?A.map(y=>sumF(y.rs,x=>x[k])):CS.map(x=>x[k]);
     return new Chart(c('c_contr_sexo'),{type:'line',data:{labels:A?A.map(y=>y.lbl):CS.map(x=>lblMes(x.t)),
       datasets:CK.map(([n,k,cl,dash])=>Object.assign(ds(n,col(k),cl),dash?{borderDash:[6,4]}:{},A?{pointRadius:3}:{}))},
