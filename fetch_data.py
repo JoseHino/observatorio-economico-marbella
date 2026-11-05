@@ -1706,10 +1706,21 @@ def argos_historico():
     prev = _leer("argos_historico.json") or {}
     hoy = datetime.date.today().year
     data = {}
-    for clave, desde, idx in (("paro", 2006, 0), ("contratos", 2009, 1)):
+    try:
+        todo = argos_marbella(2006, hoy)     # una sola consulta trae paro (2006) y contratos (2009)
+    except Exception as e:
+        todo = e
+    for clave, idx in (("paro", 0), ("contratos", 1)):
         try:
-            res = argos_marbella(desde, hoy)[idx]
-            serie = [{"t": t, "v": r["total"]} for t, r in sorted(res.items()) if r.get("total")]
+            if isinstance(todo, Exception):
+                raise todo
+            res = todo[idx]
+            # Contratos: además del total (v), el desglose por tipo y sector, para que
+            # el panel pueda enseñar cualquier mes o año desde 2009.
+            serie = [dict({"t": t, "v": r["total"]},
+                          **({k: r[k] for k in ("indefinidos", "temporales", "sectores")}
+                             if clave == "contratos" else {}))
+                     for t, r in sorted(res.items()) if r.get("total")]
             data[clave] = _tmov_funde(serie, prev.get(clave))
         except Exception as e:
             print(f"    ! {clave}: {e}")

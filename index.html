@@ -451,7 +451,7 @@ function deltaTxt(d,inv){if(d==null||!isFinite(d))return['',''];const good=(d>0&
 /* ---------- carga ---------- */
 async function loadData(){
   setStatus('Cargando datos…');
-  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis','renta_comparador'];
+  const files=['meta','paro_mensual','paro_anual','contratos_mensual','comparativa_laboral','turismo','empresas','renta','demografia','vivienda','sociedades','afiliacion','coyuntura','sima','vivienda_marbella','turismo_moviles','deuda','contexto_ia','formacion','crisis','renta_comparador','argos_historico'];
   const bust='?v='+Date.now();
   await Promise.all(files.map(async f=>{
     try{const r=await fetch('data/'+f+'.json'+bust);DATA[f]=r.ok?await r.json():null;}
@@ -651,7 +651,10 @@ function buildContr(){
 }
 /* Contratos por sector: un mes cualquiera del histórico o el total de un año. */
 function contrSecInit(s){
-  const ss=s.filter(x=>x.sectores);if(!ss.length)return;
+  // Serie larga de Argos (desde 2009) + la mensual del panel, que manda si coinciden.
+  const m={};((DATA.argos_historico||{}).contratos||[]).forEach(x=>{if(x.sectores)m[x.t]=x;});
+  s.forEach(x=>{if(x.sectores)m[x.t]=x;});
+  const ss=Object.keys(m).sort().map(t=>m[t]);if(!ss.length)return;
   const wrap=c('c_contr_sec').parentNode;
   wrap.insertAdjacentHTML('beforebegin','<div class="toolbar" style="gap:10px;flex-wrap:wrap;margin-bottom:6px">'+
     '<div class="seg" id="csec-modo" style="margin-bottom:0"><button data-m="mes" class="on">Mensual</button><button data-m="anio">Total anual</button></div>'+
