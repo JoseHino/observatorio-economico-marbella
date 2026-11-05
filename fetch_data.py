@@ -268,6 +268,10 @@ def turismo():
         "pernoctaciones": "EOT42535",
         "adr":            "EOT43543",
         "revpar":         "EOT43947",
+        "viajeros_esp":   "EOT2755",
+        "viajeros_ext":   "EOT2756",
+        "pernoct_esp":    "EOT2757",
+        "pernoct_ext":    "EOT2758",
     }
     data = {
         "hoteles":      {k: ine_mensual(c) for k, c in eoh.items()},
@@ -275,6 +279,23 @@ def turismo():
         "vut":          {k: ine_mensual(c) for k, c in vut.items()},
         "malaga":       {k: ine_mensual(c) for k, c in comp.items()},
     }
+    # Las series de total por punto turístico (EOT42428…) solo empiezan en 2018; las de
+    # residentes en España + en el extranjero (tabla 2078) llegan desde 2005 y suman el
+    # total (±1 por redondeo). Se completan con ellas los meses que falten.
+    for blq in ("hoteles", "malaga"):
+        d = data[blq]
+        for tot, a, b in (("viajeros", "viajeros_esp", "viajeros_ext"),
+                          ("pernoctaciones", "pernoct_esp", "pernoct_ext")):
+            T = {x["t"]: x for x in d.get(tot) or []}
+            A = {x["t"]: x["v"] for x in d.get(a) or [] if x.get("v") is not None}
+            B = {x["t"]: x["v"] for x in d.get(b) or [] if x.get("v") is not None}
+            n = 0
+            for t in A.keys() & B.keys():
+                if t not in T:
+                    T[t] = {"t": t, "v": A[t] + B[t]}; n += 1
+            d[tot] = [T[t] for t in sorted(T)]
+            if n:
+                print(f"    · {blq}.{tot}: {n} meses completados con residentes España + extranjero")
     write("turismo.json", data)
 
 # ---------------------------------------------------------------- RENTA
